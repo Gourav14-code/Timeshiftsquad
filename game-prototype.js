@@ -636,13 +636,13 @@ function createMathGatePair(z, leftCfg, rightCfg) {
 }
 
 // Gate Pairs on the track:
-// 1. z = -20: Left +5, Right +10
-// 2. z = -50: Left -3, Right +5
-// 3. z = -80: Left x2, Right +10
+// 1. z = -20: Left +4, Right +6
+// 2. z = -50: Left -3, Right +3
+// 3. z = -80 (Ambush gate before final battle): Left -5, Right -3 (NO multiplication gate!)
 const mathGatePairs = [
-  createMathGatePair(-20, { op: 'add', val: 5, label: '+5', isPositive: true }, { op: 'add', val: 10, label: '+10', isPositive: true }),
-  createMathGatePair(-50, { op: 'sub', val: 3, label: '-3', isPositive: false }, { op: 'add', val: 5, label: '+5', isPositive: true }),
-  createMathGatePair(-80, { op: 'mul', val: 2, label: '×2', isPositive: true }, { op: 'add', val: 10, label: '+10', isPositive: true }),
+  createMathGatePair(-20, { op: 'add', val: 4, label: '+4', isPositive: true }, { op: 'add', val: 6, label: '+6', isPositive: true }),
+  createMathGatePair(-50, { op: 'sub', val: 3, label: '-3', isPositive: false }, { op: 'add', val: 3, label: '+3', isPositive: true }),
+  createMathGatePair(-80, { op: 'sub', val: 5, label: '-5', isPositive: false }, { op: 'sub', val: 3, label: '-3', isPositive: false }),
 ];
 
 // Helper: Formation slot positions for followers behind leader
@@ -738,11 +738,12 @@ const arenaBarrier = new THREE.Mesh(
 arenaBarrier.position.set(0, 1.75, -132);
 scene.add(arenaBarrier);
 
-// Spawn 10 Enemy Grunts (80 HP each) + 1 Enemy Warlord Captain (200 HP) -> Total 1,000 HP
+// Spawn 10 Enemy Grunts (80 HP each) + 1 Enemy Warlord Captain (300 HP) -> Total 1,100 HP
+// (Engineered so player squad health is strictly lower than the enemy army!)
 function initEnemySquad() {
   // Warlord Captain in center front
-  const captain = buildHumanoidCharacter(false, true, 200);
-  captain.root.scale.set(1.35, 1.35, 1.35);
+  const captain = buildHumanoidCharacter(false, true, 300);
+  captain.root.scale.set(1.4, 1.4, 1.4);
   captain.root.position.set(0, 0, BATTLE_ARENA_Z);
   captain.root.rotation.y = Math.PI; // Facing incoming player
   scene.add(captain.root);
@@ -753,7 +754,7 @@ function initEnemySquad() {
     const grunt = buildHumanoidCharacter(false, true, 80);
     const col = (i % 5) - 2; // -2, -1, 0, 1, 2
     const row = Math.floor(i / 5);
-    const ex = col * 1.1;
+    const ex = col * 1.15;
     const ez = BATTLE_ARENA_Z - 1.4 - row * 1.3;
 
     grunt.root.position.set(ex, 0, ez);
@@ -801,6 +802,10 @@ const keysDown = {};
 
 window.addEventListener('keydown', (e) => {
   keysDown[e.code] = true;
+  if (e.code === 'Space') {
+    triggerPlayerMeleeAttack();
+    e.preventDefault();
+  }
   if (e.code === 'ShiftLeft' || e.code === 'ShiftRight') {
     triggerDodgeRoll();
   }
@@ -857,8 +862,48 @@ window.addEventListener('pointermove', onPointerMove);
 window.addEventListener('pointerup', onPointerUp);
 
 document.getElementById('btn-dodge').addEventListener('click', triggerDodgeRoll);
+const btnAttack = document.getElementById('btn-attack');
+if (btnAttack) btnAttack.addEventListener('click', triggerPlayerMeleeAttack);
 document.getElementById('btn-retry').addEventListener('click', restartGame);
 document.getElementById('btn-victory-replay').addEventListener('click', restartGame);
+
+function triggerPlayerMeleeAttack() {
+  if (!heroLeader.alive) return;
+  audio.playSwordSwing();
+  heroLeader.rightArm.rotation.x = -Math.PI / 1.5;
+  setTimeout(() => {
+    if (heroLeader.rightArm) heroLeader.rightArm.rotation.x = 0;
+  }, 160);
+
+  // Find nearest enemy to heroLeader
+  let nearestE = null;
+  let bestDist = 2.8;
+  enemySquad.forEach((e) => {
+    if (e.alive) {
+      const d = heroLeader.root.position.distanceTo(e.root.position);
+      if (d < bestDist) {
+        bestDist = d;
+        nearestE = e;
+      }
+    }
+  });
+
+  if (nearestE) {
+    const dmg = 35;
+    nearestE.hp -= dmg;
+    audio.playHitPunch();
+    updateCharacterHealthBillboard(nearestE);
+    showFloatingFeedback(nearestE.root.position, `-${dmg}`, false);
+
+    if (nearestE.hp <= 0 && nearestE.alive) {
+      nearestE.alive = false;
+      nearestE.root.rotation.x = -Math.PI / 2;
+      nearestE.root.position.y = 0.2;
+      nearestE.target = null;
+    }
+    updateHUDCounts();
+  }
+}
 
 function triggerDodgeRoll() {
   if (playerState.isRolling || battleActive) return;
