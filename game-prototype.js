@@ -636,13 +636,19 @@ function createMathGatePair(z, leftCfg, rightCfg) {
 }
 
 // Gate Pairs on the track:
-// 1. z = -20: Left +4, Right +6
-// 2. z = -50: Left -3, Right +3
-// 3. z = -80 (Ambush gate before final battle): Left -5, Right -3 (NO multiplication gate!)
+// IMPORTANT RULES ENFORCED:
+// 1. Every pair contains exactly ONE positive (+) gate and ONE negative (-) gate.
+// 2. Never place two negative gates side by side.
+// 3. Positive gate's position alternates between Left and Right across successive pairs.
+// 4. Positive gates use (+), negative gates use (-). No multiplication gates anywhere.
+//
+// Pair 1 (z = -20): Left +5 | Right -3   (Positive on LEFT)
+// Pair 2 (z = -50): Left -4 | Right +4   (Positive on RIGHT - Alternated!)
+// Pair 3 (z = -80): Left +2 | Right -3   (Positive on LEFT - Alternated! Final pair before enemy battle)
 const mathGatePairs = [
-  createMathGatePair(-20, { op: 'add', val: 4, label: '+4', isPositive: true }, { op: 'add', val: 6, label: '+6', isPositive: true }),
-  createMathGatePair(-50, { op: 'sub', val: 3, label: '-3', isPositive: false }, { op: 'add', val: 3, label: '+3', isPositive: true }),
-  createMathGatePair(-80, { op: 'sub', val: 5, label: '-5', isPositive: false }, { op: 'sub', val: 3, label: '-3', isPositive: false }),
+  createMathGatePair(-20, { op: 'add', val: 5, label: '+5', isPositive: true }, { op: 'sub', val: 3, label: '-3', isPositive: false }),
+  createMathGatePair(-50, { op: 'sub', val: 4, label: '-4', isPositive: false }, { op: 'add', val: 4, label: '+4', isPositive: true }),
+  createMathGatePair(-80, { op: 'add', val: 2, label: '+2', isPositive: true }, { op: 'sub', val: 3, label: '-3', isPositive: false }),
 ];
 
 // Helper: Formation slot positions for followers behind leader
@@ -738,7 +744,7 @@ const arenaBarrier = new THREE.Mesh(
 arenaBarrier.position.set(0, 1.75, -132);
 scene.add(arenaBarrier);
 
-// Spawn 10 Enemy Grunts (80 HP each) + 1 Enemy Warlord Captain (300 HP) -> Total 1,100 HP
+// Spawn 10 Enemy Grunts (100 HP each) + 1 Enemy Warlord Captain (300 HP) -> Total 1,300 HP
 // (Engineered so player squad health is strictly lower than the enemy army!)
 function initEnemySquad() {
   // Warlord Captain in center front
@@ -751,7 +757,7 @@ function initEnemySquad() {
 
   // 10 Grunts in formation behind and flanking captain
   for (let i = 0; i < 10; i++) {
-    const grunt = buildHumanoidCharacter(false, true, 80);
+    const grunt = buildHumanoidCharacter(false, true, 100);
     const col = (i % 5) - 2; // -2, -1, 0, 1, 2
     const row = Math.floor(i / 5);
     const ex = col * 1.15;
