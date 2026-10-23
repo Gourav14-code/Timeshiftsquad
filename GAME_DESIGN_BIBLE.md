@@ -264,3 +264,4 @@ Dynamic 3D video game key art, overhead third-person combat arena perspective. I
 | **Curved & Branching Roads** | **Needs Upgrade** | The track is currently a single linear straightaway ($Z = +25$ to $-135$). Connected curved segments and branching Y-junctions from `design-preview.js` need to be integrated into the primary gameplay loop. |
 | **Overworld Collectibles** | **Needs Upgrade** | Squad recruits currently materialize directly when crossing a math gate. Standalone friendly characters stationed on the road awaiting rescue/recruitment are not yet implemented. |
 | **Skeletal Rigging & Combat Combos** | **Needs Upgrade** | Walking and attacking currently rely on basic rotation lerps (`rotation.x = -Math.PI / 1.5`). They function correctly, but skinned mesh animations (run cycles, 3-hit slash combos, stagger reactions) will dramatically elevate visual feel. |
+
