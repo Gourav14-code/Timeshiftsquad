@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-  <title>Time Shift Squad - 3D Action RPG</title>
+  <title>Time Shift Squad - Math Gates & Final Battle</title>
   <link rel="stylesheet" href="style.css" />
 
   <!-- Three.js ES Module Import Map (Official Stable CDN) -->
@@ -16,60 +16,43 @@
   </script>
 </head>
 <body>
-  <!-- Red Combat Border Vignette (Visible during locked combat encounters) -->
-  <div id="combat-vignette"></div>
-
   <!-- Heads-Up Display (HUD) Layer -->
   <div id="hud">
-    <!-- Top Row: Hero Card, Encounter Indicator, Weapon Card -->
+    <!-- Top Row: Player Squad Status & Final Enemy Army Status -->
     <div class="hud-top-row">
-      <!-- Player Status Card -->
-      <div class="player-card">
-        <div class="player-title-row">
-          <span class="player-name">SQUAD HERO</span>
-          <span id="hud-era" class="era-badge">ERA 1: BRONZE</span>
+      <!-- Player Squad Card -->
+      <div class="squad-card">
+        <div class="card-title-row">
+          <span class="squad-title">YOUR SQUAD</span>
+          <span id="hud-squad-count" class="squad-count-badge">SQUAD: 1</span>
         </div>
-        <div class="health-bar-bg">
-          <div id="player-health-fill" class="health-bar-fill"></div>
+        <div class="health-bar-container">
+          <div id="hero-hp-fill" class="health-bar-fill-hero"></div>
         </div>
-        <div class="stats-row">
-          <span>HP: <strong id="hud-hp">100 / 100</strong></span>
-          <span>SQUAD: <strong id="hud-squad">1 HERO</strong></span>
-          <span>KILLS: <strong id="hud-kills">0</strong></span>
+        <div class="hp-numeric-row">
+          <span>TEAM HP:</span>
+          <strong id="hud-hero-hp">100 / 100</strong>
         </div>
       </div>
 
-      <!-- Center Encounter State Pill -->
-      <div id="encounter-pill" class="encounter-pill">
-        <span id="encounter-dot">🟢</span>
-        <span id="encounter-status-text">EXPLORATION</span>
-      </div>
-
-      <!-- Weapon HUD Card -->
-      <div class="weapon-card">
-        <div id="weapon-icon" class="weapon-icon">⚔️</div>
-        <div class="weapon-details">
-          <span id="weapon-name" class="weapon-name">IRON BROADSWORD</span>
-          <span class="weapon-hint">SPACE / CLICK TO ATTACK</span>
+      <!-- Enemy Squad Card -->
+      <div class="enemy-card">
+        <div class="card-title-row">
+          <span class="enemy-title">ENEMY ARMY</span>
+          <span id="hud-enemy-count" class="enemy-count-badge">ENEMIES: 11</span>
+        </div>
+        <div class="health-bar-container">
+          <div id="enemy-hp-fill" class="health-bar-fill-enemy"></div>
+        </div>
+        <div class="hp-numeric-row">
+          <span>ARMY HP:</span>
+          <strong id="hud-enemy-hp">1,000 / 1,000</strong>
         </div>
       </div>
     </div>
 
-    <!-- Vertical Timeline Meter (From Reference Image: Eras 1, 2, 3) -->
-    <div class="timeline-meter">
-      <div id="time-node-3" class="timeline-node" title="Era 3: Sci-Fi Plasma">3</div>
-      <div class="timeline-track">
-        <div id="timeline-fill" class="timeline-track-fill"></div>
-      </div>
-      <div id="time-node-2" class="timeline-node" title="Era 2: Medieval Bow">2</div>
-      <div class="timeline-track">
-        <div id="timeline-fill-lower" class="timeline-track-fill"></div>
-      </div>
-      <div id="time-node-1" class="timeline-node active" title="Era 1: Spartan/Bronze">1</div>
-    </div>
-
-    <!-- Center Floating Event Announcement Banner -->
-    <div id="event-banner">ENCOUNTER STARTED!</div>
+    <!-- Center Event Announcement Banner -->
+    <div id="announcement-banner">PASS THROUGH GATES TO BUILD YOUR SQUAD!</div>
 
     <!-- Bottom Controls & Touch Joystick Layer -->
     <div class="controls-layer">
@@ -85,47 +68,36 @@
           <span class="kbd-badge">A</span>
           <span class="kbd-badge">S</span>
           <span class="kbd-badge">D</span>
-          <span>Move (360°)</span>
-        </div>
-        <div class="guide-item">
-          <span class="kbd-badge">SPACE</span>
-          <span>Attack</span>
+          <span>Move (Forward & Strafe)</span>
         </div>
         <div class="guide-item">
           <span class="kbd-badge">SHIFT</span>
           <span>Dodge Roll</span>
         </div>
-        <div class="guide-item">
-          <span class="kbd-badge">Q</span>
-          <span>Swap Weapon</span>
-        </div>
       </div>
 
-      <!-- On-Screen Action Buttons -->
+      <!-- Action Buttons -->
       <div class="action-buttons">
-        <div class="secondary-actions">
-          <button id="btn-swap" class="action-btn btn-secondary" title="Swap Weapon (Q)">
-            <span class="btn-icon">🔄</span>
-            <span class="btn-label">SWAP</span>
-          </button>
-          <button id="btn-dodge" class="action-btn btn-secondary" title="Dodge Roll (Shift)">
-            <span class="btn-icon">💨</span>
-            <span class="btn-label">DODGE</span>
-          </button>
-        </div>
-        <button id="btn-attack" class="action-btn btn-attack" title="Attack (Space / Click)">
-          <span id="btn-attack-icon" class="btn-icon">⚔️</span>
-          <span class="btn-label">ATTACK</span>
+        <button id="btn-dodge" class="btn-dodge" title="Dodge Roll (Shift)">
+          <span class="btn-icon">💨</span>
+          <span class="btn-label">DODGE</span>
         </button>
       </div>
     </div>
   </div>
 
+  <!-- Level Complete / Victory Modal -->
+  <div id="modal-victory" class="modal-overlay">
+    <h2 class="modal-title-victory">LEVEL COMPLETE!</h2>
+    <p class="modal-subtitle">Your squad overwhelmed the enemy army and conquered the sector!</p>
+    <button id="btn-victory-replay" class="btn-action-primary">PLAY AGAIN</button>
+  </div>
+
   <!-- Game Over / Defeat Modal -->
-  <div id="defeat-modal">
-    <h2 class="defeat-title">SQUAD DEFEATED</h2>
-    <p class="defeat-subtitle">Your hero has fallen in battle.</p>
-    <button id="btn-retry" class="btn-retry">RETRY LEVEL</button>
+  <div id="modal-defeat" class="modal-overlay">
+    <h2 class="modal-title-defeat">GAME OVER</h2>
+    <p class="modal-subtitle">Your squad was outnumbered and defeated. Choose better math gates to build a stronger army!</p>
+    <button id="btn-retry" class="btn-action-primary">RETRY LEVEL</button>
   </div>
 
   <!-- 3D Canvas Mount Point -->

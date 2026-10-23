@@ -1,30 +1,31 @@
 /**
  * ============================================================================
- * TIME SHIFT SQUAD - Real 3D Action RPG & Encounter System
+ * TIME SHIFT SQUAD - Math Gates & Final Squad Battle
  * File: main.js
  * ============================================================================
- * Key Architecture:
- * 1. Visual Quality: Immersive 3D world with mountain horizon, rolling terrain,
- *    paved stone paths, wooden railings, lanterns, and conical trees.
- * 2. Start with exactly ONE player. Friendly allies are placed ahead along the
- *    route and join the squad with a collection animation when reached.
- * 3. Encounter State Machine:
- *    EXPLORATION -> ENCOUNTER_START -> COMBAT -> VICTORY -> REWARD -> EXPLORATION.
- *    Forward progression is locked during combat via physical energy barriers!
- * 4. Active Combat System:
- *    - Enemies flank, chase, wind up, and strike with warning indicators.
- *    - Hit-stop (impact freeze), screen shake, weapon trails, impact sparks,
- *      knockback, floating damage numbers, and audio synthesizer effects.
- *    - Squad allies actively target and attack nearby enemies in combat!
- * 5. Time Shift Portals: Circular clock machine portals that upgrade the era,
- *    weapons, and timeline gauge.
- * 6. Procedural Web Audio API sound effects (zero external asset dependencies).
+ * Features:
+ * 1. Starting Gameplay:
+ *    - Exactly ONE player character at level start.
+ *    - No automatic forward runner; moves only on joystick / WASD input.
+ *    - Smooth third-person elevated follow camera.
+ * 2. Math Gates:
+ *    - Pairs of 3D gates (+5, +10, -3, x2) placed along the path.
+ *    - Prominent mathematical operator and value textures.
+ *    - Detects chosen side and executes exactly once with floating feedback.
+ *    - Adds or removes teammates safely, clamping squad count to min 1.
+ *    - Maintains stable, orderly grid formation behind the leader.
+ * 3. Final Squad Battle Encounter:
+ *    - Enemy squad blocks progression at the end of the track.
+ *    - Individual health bars with numeric values (e.g. 100/100) above EVERY character!
+ *    - Real automatic clash when squads meet: targeting, movement, sword swings,
+ *      hit reactions, impact sparks, and real health depletion.
+ *    - Outcome: LEVEL COMPLETE on victory or GAME OVER on defeat.
  */
 
 import * as THREE from 'three';
 
 // ----------------------------------------------------------------------------
-// 1. Procedural Web Audio API Sound Synthesizer (Zero Dependencies)
+// 1. Procedural Web Audio Sound Synthesizer (Zero External Dependencies)
 // ----------------------------------------------------------------------------
 class SoundSystem {
   constructor() {
@@ -41,102 +42,107 @@ class SoundSystem {
         this.initialized = true;
       }
     } catch {
-      // Audio optional; fallback gracefully
+      // Audio optional
     }
   }
 
-  // Sword swing whoosh (filtered noise)
+  playGatePositive() {
+    if (!this.ctx) return;
+    const notes = [440, 554.37, 659.25, 880];
+    notes.forEach((freq, i) => {
+      const osc = this.ctx.createOscillator();
+      const gain = this.ctx.createGain();
+      const t = this.ctx.currentTime + i * 0.07;
+      osc.type = 'triangle';
+      osc.frequency.setValueAtTime(freq, t);
+      gain.gain.setValueAtTime(0.2, t);
+      gain.gain.exponentialRampToValueAtTime(0.01, t + 0.2);
+      osc.connect(gain);
+      gain.connect(this.ctx.destination);
+      osc.start(t);
+      osc.stop(t + 0.2);
+    });
+  }
+
+  playGateNegative() {
+    if (!this.ctx) return;
+    const osc = this.ctx.createOscillator();
+    const gain = this.ctx.createGain();
+    osc.type = 'sawtooth';
+    osc.frequency.setValueAtTime(180, this.ctx.currentTime);
+    osc.frequency.exponentialRampToValueAtTime(80, this.ctx.currentTime + 0.25);
+    gain.gain.setValueAtTime(0.25, this.ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + 0.25);
+    osc.connect(gain);
+    gain.connect(this.ctx.destination);
+    osc.start();
+    osc.stop(this.ctx.currentTime + 0.25);
+  }
+
   playSwordSwing() {
     if (!this.ctx) return;
     const osc = this.ctx.createOscillator();
     const gain = this.ctx.createGain();
     osc.type = 'triangle';
-    osc.frequency.setValueAtTime(280, this.ctx.currentTime);
-    osc.frequency.exponentialRampToValueAtTime(80, this.ctx.currentTime + 0.14);
+    osc.frequency.setValueAtTime(300, this.ctx.currentTime);
+    osc.frequency.exponentialRampToValueAtTime(90, this.ctx.currentTime + 0.12);
+    gain.gain.setValueAtTime(0.18, this.ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + 0.12);
+    osc.connect(gain);
+    gain.connect(this.ctx.destination);
+    osc.start();
+    osc.stop(this.ctx.currentTime + 0.12);
+  }
 
-    gain.gain.setValueAtTime(0.2, this.ctx.currentTime);
+  playHitPunch() {
+    if (!this.ctx) return;
+    const osc = this.ctx.createOscillator();
+    const gain = this.ctx.createGain();
+    osc.type = 'sawtooth';
+    osc.frequency.setValueAtTime(140, this.ctx.currentTime);
+    osc.frequency.exponentialRampToValueAtTime(35, this.ctx.currentTime + 0.14);
+    gain.gain.setValueAtTime(0.3, this.ctx.currentTime);
     gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + 0.14);
-
     osc.connect(gain);
     gain.connect(this.ctx.destination);
     osc.start();
     osc.stop(this.ctx.currentTime + 0.14);
   }
 
-  // Hit impact punch
-  playHitImpact() {
+  playVictoryFanfare() {
     if (!this.ctx) return;
-    const osc = this.ctx.createOscillator();
-    const gain = this.ctx.createGain();
-    osc.type = 'sawtooth';
-    osc.frequency.setValueAtTime(160, this.ctx.currentTime);
-    osc.frequency.exponentialRampToValueAtTime(40, this.ctx.currentTime + 0.16);
-
-    gain.gain.setValueAtTime(0.35, this.ctx.currentTime);
-    gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + 0.16);
-
-    osc.connect(gain);
-    gain.connect(this.ctx.destination);
-    osc.start();
-    osc.stop(this.ctx.currentTime + 0.16);
-  }
-
-  // Alert sting when encounter starts
-  playAlertSting() {
-    if (!this.ctx) return;
-    const osc = this.ctx.createOscillator();
-    const gain = this.ctx.createGain();
-    osc.type = 'square';
-    osc.frequency.setValueAtTime(440, this.ctx.currentTime);
-    osc.frequency.setValueAtTime(660, this.ctx.currentTime + 0.1);
-
-    gain.gain.setValueAtTime(0.18, this.ctx.currentTime);
-    gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + 0.35);
-
-    osc.connect(gain);
-    gain.connect(this.ctx.destination);
-    osc.start();
-    osc.stop(this.ctx.currentTime + 0.35);
-  }
-
-  // Victory fanfare chime (major chord arpeggio)
-  playVictory() {
-    if (!this.ctx) return;
-    const notes = [523.25, 659.25, 783.99, 1046.5]; // C5, E5, G5, C6
-    notes.forEach((freq, idx) => {
+    const chords = [523.25, 659.25, 783.99, 1046.5];
+    chords.forEach((freq, idx) => {
       const osc = this.ctx.createOscillator();
       const gain = this.ctx.createGain();
       const t = this.ctx.currentTime + idx * 0.12;
-
       osc.type = 'sine';
       osc.frequency.setValueAtTime(freq, t);
-
-      gain.gain.setValueAtTime(0.2, t);
-      gain.gain.exponentialRampToValueAtTime(0.01, t + 0.35);
-
+      gain.gain.setValueAtTime(0.22, t);
+      gain.gain.exponentialRampToValueAtTime(0.01, t + 0.4);
       osc.connect(gain);
       gain.connect(this.ctx.destination);
       osc.start(t);
-      osc.stop(t + 0.35);
+      osc.stop(t + 0.4);
     });
   }
 
-  // Ally rescue sparkle chime
-  playAllyRescue() {
+  playDefeatSting() {
     if (!this.ctx) return;
-    const osc = this.ctx.createOscillator();
-    const gain = this.ctx.createGain();
-    osc.type = 'sine';
-    osc.frequency.setValueAtTime(600, this.ctx.currentTime);
-    osc.frequency.exponentialRampToValueAtTime(1200, this.ctx.currentTime + 0.25);
-
-    gain.gain.setValueAtTime(0.25, this.ctx.currentTime);
-    gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + 0.3);
-
-    osc.connect(gain);
-    gain.connect(this.ctx.destination);
-    osc.start();
-    osc.stop(this.ctx.currentTime + 0.3);
+    const notes = [350, 311, 277, 220];
+    notes.forEach((freq, idx) => {
+      const osc = this.ctx.createOscillator();
+      const gain = this.ctx.createGain();
+      const t = this.ctx.currentTime + idx * 0.18;
+      osc.type = 'sawtooth';
+      osc.frequency.setValueAtTime(freq, t);
+      gain.gain.setValueAtTime(0.2, t);
+      gain.gain.exponentialRampToValueAtTime(0.01, t + 0.3);
+      osc.connect(gain);
+      gain.connect(this.ctx.destination);
+      osc.start(t);
+      osc.stop(t + 0.3);
+    });
   }
 }
 
@@ -145,12 +151,12 @@ window.addEventListener('pointerdown', () => audio.init(), { once: true });
 window.addEventListener('keydown', () => audio.init(), { once: true });
 
 // ----------------------------------------------------------------------------
-// 2. Three.js Scene, Renderer & Atmospheric Environment
+// 2. Three.js Scene, Camera & Lighting Setup
 // ----------------------------------------------------------------------------
 const scene = new THREE.Scene();
 const SKY_COLOR = 0x87ceeb;
 scene.background = new THREE.Color(SKY_COLOR);
-scene.fog = new THREE.FogExp2(SKY_COLOR, 0.008);
+scene.fog = new THREE.FogExp2(SKY_COLOR, 0.0075);
 
 const container = document.getElementById('game-container');
 const renderer = new THREE.WebGLRenderer({ antialias: true });
@@ -162,20 +168,19 @@ renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure = 1.15;
 container.appendChild(renderer.domElement);
 
-// Third-Person Camera
-const camera = new THREE.PerspectiveCamera(58, window.innerWidth / window.innerHeight, 0.1, 600);
+const camera = new THREE.PerspectiveCamera(56, window.innerWidth / window.innerHeight, 0.1, 600);
 
 // Lighting
 const ambientLight = new THREE.AmbientLight(0xffffff, 0.7);
 scene.add(ambientLight);
 
-const sunLight = new THREE.DirectionalLight(0xfffaed, 1.4);
-sunLight.position.set(35, 55, 30);
+const sunLight = new THREE.DirectionalLight(0xfff7ed, 1.35);
+sunLight.position.set(30, 50, 25);
 sunLight.castShadow = true;
 sunLight.shadow.mapSize.width = 2048;
 sunLight.shadow.mapSize.height = 2048;
 sunLight.shadow.camera.near = 1.0;
-sunLight.shadow.camera.far = 220;
+sunLight.shadow.camera.far = 240;
 sunLight.shadow.camera.left = -45;
 sunLight.shadow.camera.right = 45;
 sunLight.shadow.camera.top = 45;
@@ -187,11 +192,13 @@ const hemiLight = new THREE.HemisphereLight(0xb1e1ff, 0x48bb78, 0.45);
 scene.add(hemiLight);
 
 // ----------------------------------------------------------------------------
-// 3. Immersive 3D Surrounding Environment (Mountains, Hills, Trees)
+// 3. Materials & 3D Environment (Mountain Backdrop, Rolling Meadow, Trees)
 // ----------------------------------------------------------------------------
 const MAT = {
-  skin: new THREE.MeshStandardMaterial({ color: 0xf59e0b, roughness: 0.35 }), // Yellow hero skin
-  armor: new THREE.MeshStandardMaterial({ color: 0x475569, metalness: 0.6, roughness: 0.3 }),
+  skinHero: new THREE.MeshStandardMaterial({ color: 0xf59e0b, roughness: 0.35 }), // Yellow hero skin
+  skinEnemy: new THREE.MeshStandardMaterial({ color: 0xdc2626, roughness: 0.4 }), // Crimson enemy skin
+  armorHero: new THREE.MeshStandardMaterial({ color: 0x475569, metalness: 0.6, roughness: 0.3 }),
+  armorEnemy: new THREE.MeshStandardMaterial({ color: 0x1e1b4b, metalness: 0.5, roughness: 0.4 }),
   gold: new THREE.MeshStandardMaterial({ color: 0xfbbf24, metalness: 0.8, roughness: 0.2 }),
   crest: new THREE.MeshStandardMaterial({ color: 0xef4444, roughness: 0.4 }),
   woodPlank: new THREE.MeshStandardMaterial({ color: 0x9a3412, roughness: 0.7 }),
@@ -201,60 +208,51 @@ const MAT = {
   mountainSnow: new THREE.MeshStandardMaterial({ color: 0xf8fafc, roughness: 0.8 }),
   treeTrunk: new THREE.MeshStandardMaterial({ color: 0x543212, roughness: 0.8 }),
   treeFoliage: new THREE.MeshStandardMaterial({ color: 0x16a34a, roughness: 0.6 }),
-  enemySkin: new THREE.MeshStandardMaterial({ color: 0xdc2626, roughness: 0.4 }),
-  enemyArmor: new THREE.MeshStandardMaterial({ color: 0x1e1b4b, roughness: 0.5 }),
-  barrierRed: new THREE.MeshStandardMaterial({ color: 0xef4444, transparent: true, opacity: 0.6, side: THREE.DoubleSide }),
-  crystalPurple: new THREE.MeshStandardMaterial({ color: 0xa855f7, roughness: 0.2, metalness: 0.3 }),
+  blade: new THREE.MeshStandardMaterial({ color: 0xcfd8dc, metalness: 0.8, roughness: 0.2 }),
 };
 
-// Ground plane
+// Ground meadow
 const groundGeo = new THREE.PlaneGeometry(600, 600);
 const groundMat = new THREE.MeshStandardMaterial({ color: 0x4ade80, roughness: 0.95 });
 const ground = new THREE.Mesh(groundGeo, groundMat);
 ground.rotation.x = -Math.PI / 2;
-ground.position.set(0, -0.05, -70);
+ground.position.set(0, -0.05, -60);
 ground.receiveShadow = true;
 scene.add(ground);
 
-// Distant low-poly mountain ring
+// Distant low-poly mountains
 function spawnMountain(x, z, scale = 1.0) {
-  const group = new THREE.Group();
-  group.position.set(x, 0, z);
+  const g = new THREE.Group();
+  g.position.set(x, 0, z);
 
-  const baseGeo = new THREE.ConeGeometry(24 * scale, 35 * scale, 7);
-  const baseMesh = new THREE.Mesh(baseGeo, MAT.mountain);
-  baseMesh.position.y = 17.5 * scale;
-  group.add(baseMesh);
+  const baseMesh = new THREE.Mesh(new THREE.ConeGeometry(24 * scale, 34 * scale, 7), MAT.mountain);
+  baseMesh.position.y = 17 * scale;
+  g.add(baseMesh);
 
-  // Snow cap
-  const capGeo = new THREE.ConeGeometry(9 * scale, 12 * scale, 7);
-  const capMesh = new THREE.Mesh(capGeo, MAT.mountainSnow);
-  capMesh.position.y = 29 * scale;
-  group.add(capMesh);
+  const capMesh = new THREE.Mesh(new THREE.ConeGeometry(9 * scale, 12 * scale, 7), MAT.mountainSnow);
+  capMesh.position.y = 28 * scale;
+  g.add(capMesh);
 
-  scene.add(group);
+  scene.add(g);
 }
 
-// Mountain backdrop ring
-for (let angle = 0; angle < Math.PI * 2; angle += 0.4) {
+for (let a = 0; a < Math.PI * 2; a += 0.4) {
   const dist = 180 + Math.random() * 40;
-  spawnMountain(Math.cos(angle) * dist, Math.sin(angle) * dist - 70, 0.9 + Math.random() * 0.6);
+  spawnMountain(Math.cos(a) * dist, Math.sin(a) * dist - 60, 0.9 + Math.random() * 0.5);
 }
 
-// Low-poly conical trees & wooden lanterns
+// Low-poly conical trees
 function spawnTree(x, z, scale = 1.0) {
   const tree = new THREE.Group();
   tree.position.set(x, 0, z);
 
-  const trunkGeo = new THREE.CylinderGeometry(0.25 * scale, 0.35 * scale, 1.8 * scale, 6);
-  const trunk = new THREE.Mesh(trunkGeo, MAT.treeTrunk);
+  const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.24 * scale, 0.34 * scale, 1.8 * scale, 6), MAT.treeTrunk);
   trunk.position.y = 0.9 * scale;
   trunk.castShadow = true;
   tree.add(trunk);
 
   for (let i = 0; i < 3; i++) {
-    const coneGeo = new THREE.ConeGeometry((1.5 - i * 0.3) * scale, 1.6 * scale, 6);
-    const foliage = new THREE.Mesh(coneGeo, MAT.treeFoliage);
+    const foliage = new THREE.Mesh(new THREE.ConeGeometry((1.5 - i * 0.3) * scale, 1.6 * scale, 6), MAT.treeFoliage);
     foliage.position.y = (1.8 + i * 0.9) * scale;
     foliage.castShadow = true;
     tree.add(foliage);
@@ -262,261 +260,71 @@ function spawnTree(x, z, scale = 1.0) {
   scene.add(tree);
 }
 
-function spawnLantern(x, z) {
-  const group = new THREE.Group();
-  group.position.set(x, 0, z);
-
-  const post = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.1, 2.2, 6), MAT.woodPost);
-  post.position.y = 1.1;
-  group.add(post);
-
-  const lantern = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.35, 0.3), new THREE.MeshBasicMaterial({ color: 0xfef08a }));
-  lantern.position.set(0, 2.1, 0);
-  group.add(lantern);
-
-  scene.add(group);
-}
-
-for (let z = 20; z > -160; z -= 11) {
-  spawnTree(-8 - Math.random() * 8, z + (Math.random() - 0.5) * 5, 0.8 + Math.random() * 0.5);
-  spawnTree(8 + Math.random() * 8, z + (Math.random() - 0.5) * 5, 0.8 + Math.random() * 0.5);
+for (let z = 25; z > -150; z -= 11) {
+  spawnTree(-8 - Math.random() * 7, z + (Math.random() - 0.5) * 4, 0.8 + Math.random() * 0.4);
+  spawnTree(8 + Math.random() * 7, z + (Math.random() - 0.5) * 4, 0.8 + Math.random() * 0.4);
 }
 
 // ----------------------------------------------------------------------------
-// 4. Connected 3D Paths with Real Curves & Y-Junction
+// 4. Running Track & Wooden Fence Railings
 // ----------------------------------------------------------------------------
-const ROAD_WIDTH = 5.8;
+const ROAD_WIDTH = 6.2;
+const TRACK_LENGTH = 160;
 
-function buildFence(x, zStart, zEnd, rotY = 0) {
+// Main continuous stone pathway (z = +25 down to -135)
+const trackMesh = new THREE.Mesh(new THREE.BoxGeometry(ROAD_WIDTH, 0.12, TRACK_LENGTH), MAT.stoneRoad);
+trackMesh.position.set(0, 0.06, -55);
+trackMesh.receiveShadow = true;
+scene.add(trackMesh);
+
+// Wooden side plank walkways
+const leftWalk = new THREE.Mesh(new THREE.BoxGeometry(0.8, 0.14, TRACK_LENGTH), MAT.woodPlank);
+leftWalk.position.set(-ROAD_WIDTH / 2 + 0.4, 0.07, -55);
+leftWalk.receiveShadow = true;
+scene.add(leftWalk);
+
+function buildFence(x, zStart, zEnd) {
   const group = new THREE.Group();
   const len = Math.abs(zEnd - zStart);
-  const postDist = 2.4;
-  const num = Math.floor(len / postDist);
+  const spacing = 2.4;
+  const numPosts = Math.floor(len / spacing);
 
   const postGeo = new THREE.CylinderGeometry(0.12, 0.14, 1.1, 8);
-  const railGeo = new THREE.BoxGeometry(0.1, 0.12, postDist + 0.1);
+  const railGeo = new THREE.BoxGeometry(0.1, 0.12, spacing + 0.1);
 
-  for (let i = 0; i <= num; i++) {
+  for (let i = 0; i <= numPosts; i++) {
     const p = new THREE.Mesh(postGeo, MAT.woodPost);
-    p.position.set(0, 0.55, -i * postDist);
+    p.position.set(0, 0.55, -i * spacing);
     p.castShadow = true;
     group.add(p);
 
-    if (i < num) {
-      const rail1 = new THREE.Mesh(railGeo, MAT.woodPlank);
-      rail1.position.set(0, 0.88, -(i + 0.5) * postDist);
-      rail1.castShadow = true;
-      group.add(rail1);
+    if (i < numPosts) {
+      const r1 = new THREE.Mesh(railGeo, MAT.woodPlank);
+      r1.position.set(0, 0.88, -(i + 0.5) * spacing);
+      r1.castShadow = true;
+      group.add(r1);
 
-      const rail2 = new THREE.Mesh(railGeo, MAT.woodPlank);
-      rail2.position.set(0, 0.48, -(i + 0.5) * postDist);
-      rail2.castShadow = true;
-      group.add(rail2);
+      const r2 = new THREE.Mesh(railGeo, MAT.woodPlank);
+      r2.position.set(0, 0.48, -(i + 0.5) * spacing);
+      r2.castShadow = true;
+      group.add(r2);
     }
   }
 
   group.position.set(x, 0, zStart);
-  group.rotation.y = rotY;
   scene.add(group);
 }
 
-// Section 1: Approach Road (z = 25 down to -50)
-const sec1Mesh = new THREE.Mesh(new THREE.BoxGeometry(ROAD_WIDTH, 0.12, 75), MAT.stoneRoad);
-sec1Mesh.position.set(0, 0.06, -12.5);
-sec1Mesh.receiveShadow = true;
-scene.add(sec1Mesh);
-
-// Side plank walk & fences
-const leftWalk = new THREE.Mesh(new THREE.BoxGeometry(0.8, 0.14, 75), MAT.woodPlank);
-leftWalk.position.set(-ROAD_WIDTH / 2 + 0.4, 0.07, -12.5);
-leftWalk.receiveShadow = true;
-scene.add(leftWalk);
-
-buildFence(-ROAD_WIDTH / 2, 25, -50);
-buildFence(ROAD_WIDTH / 2, 25, -50);
-
-spawnLantern(-ROAD_WIDTH / 2 - 0.4, 10);
-spawnLantern(ROAD_WIDTH / 2 + 0.4, 10);
-spawnLantern(-ROAD_WIDTH / 2 - 0.4, -20);
-spawnLantern(ROAD_WIDTH / 2 + 0.4, -20);
-
-// Section 2: Connected Y-Junction (z = -50 to -95)
-function getBranchTransform(z, branch) {
-  if (z >= -50) {
-    return { x: 0, heading: 0 };
-  } else if (z >= -95) {
-    const t = (-50 - z) / 45.0;
-    const smooth = t * t * (3 - 2 * t);
-    const sign = branch === 'left' ? -1 : 1;
-    const angle = 0.42; // ~24 deg
-    return {
-      x: sign * smooth * 7.5,
-      heading: sign * smooth * angle,
-    };
-  } else {
-    const past = -95 - z;
-    const sign = branch === 'left' ? -1 : 1;
-    const angle = 0.42;
-    return {
-      x: sign * (7.5 + past * Math.tan(angle)),
-      heading: sign * angle,
-    };
-  }
-}
-
-function buildCurvedBranchMesh(branch) {
-  const segs = 20;
-  const zStart = -50;
-  const zEnd = -95;
-  const dz = (zEnd - zStart) / segs;
-  const halfW = (ROAD_WIDTH * 0.9) / 2;
-
-  const vertices = [];
-  const indices = [];
-
-  for (let i = 0; i <= segs; i++) {
-    const z = zStart + i * dz;
-    const tf = getBranchTransform(z, branch);
-    const cosH = Math.cos(tf.heading);
-    const sinH = Math.sin(tf.heading);
-
-    vertices.push(tf.x - halfW * cosH, 0.06, z + halfW * sinH);
-    vertices.push(tf.x + halfW * cosH, 0.06, z - halfW * sinH);
-
-    if (i < segs) {
-      const r1 = i * 2;
-      const r2 = (i + 1) * 2;
-      indices.push(r1, r2, r1 + 1);
-      indices.push(r1 + 1, r2, r2 + 1);
-    }
-  }
-
-  const geo = new THREE.BufferGeometry();
-  geo.setAttribute('position', new THREE.Float32BufferAttribute(vertices, 3));
-  geo.setIndex(indices);
-  geo.computeVertexNormals();
-
-  const mesh = new THREE.Mesh(geo, MAT.stoneRoad);
-  mesh.receiveShadow = true;
-  scene.add(mesh);
-}
-
-buildCurvedBranchMesh('left');
-buildCurvedBranchMesh('right');
-
-// Center wooden divider island wedge at Y-fork
-const forkWedge = new THREE.Mesh(new THREE.ConeGeometry(0.85, 4.0, 3), MAT.woodPlank);
-forkWedge.rotation.x = Math.PI / 2;
-forkWedge.rotation.z = Math.PI;
-forkWedge.position.set(0, 0.12, -52.5);
-scene.add(forkWedge);
-
-// Continuations (z = -95 to -165)
-function buildBranchContinuation(branch) {
-  const group = new THREE.Group();
-  const len = 70;
-  const zC = -95 - len / 2;
-  const angle = 0.42;
-  const heading = branch === 'left' ? -angle : angle;
-  const sign = branch === 'left' ? -1 : 1;
-  const xC = sign * (7.5 + (len / 2) * Math.tan(angle));
-
-  const mesh = new THREE.Mesh(new THREE.BoxGeometry(ROAD_WIDTH * 0.9, 0.12, len), MAT.stoneRoad);
-  mesh.position.set(xC, 0.06, zC);
-  mesh.rotation.y = heading;
-  mesh.receiveShadow = true;
-  group.add(mesh);
-
-  scene.add(group);
-}
-buildBranchContinuation('left');
-buildBranchContinuation('right');
+buildFence(-ROAD_WIDTH / 2, 25, -135);
+buildFence(ROAD_WIDTH / 2, 25, -135);
 
 // ----------------------------------------------------------------------------
-// 5. Time Shift Clock Portal (From Reference Image!)
+// 5. Stylized 3D Humanoid Rig with Readable Overhead Health Bar
 // ----------------------------------------------------------------------------
-const timePortals = [];
-
-function createTimeClockPortal(x, z, eraTarget, eraName, badgeText) {
-  const portal = new THREE.Group();
-  portal.position.set(x, 0, z);
-
-  // Pedestal
-  const base = new THREE.Mesh(new THREE.CylinderGeometry(2.3, 2.6, 0.35, 16), MAT.armor);
-  base.position.y = 0.175;
-  portal.add(base);
-
-  // Pillars & Arch
-  const leftPillar = new THREE.Mesh(new THREE.CylinderGeometry(0.18, 0.22, 3.8, 12), MAT.armor);
-  leftPillar.position.set(-1.6, 2.0, 0);
-  portal.add(leftPillar);
-
-  const rightPillar = leftPillar.clone();
-  rightPillar.position.x = 1.6;
-  portal.add(rightPillar);
-
-  // Clock Dial
-  const dial = new THREE.Mesh(new THREE.CylinderGeometry(1.25, 1.25, 0.12, 32), MAT.armor);
-  dial.rotation.x = Math.PI / 2;
-  dial.position.set(0, 2.5, 0);
-  portal.add(dial);
-
-  const face = new THREE.Mesh(new THREE.CircleGeometry(1.05, 32), new THREE.MeshBasicMaterial({ color: 0xffffff }));
-  face.position.set(0, 2.5, 0.07);
-  portal.add(face);
-
-  const hand = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.75, 0.04), MAT.crest);
-  hand.position.set(0, 2.5, 0.1);
-  portal.add(hand);
-
-  // Overhead Badge
-  const canvas = document.createElement('canvas');
-  canvas.width = 256;
-  canvas.height = 80;
-  const ctx = canvas.getContext('2d');
-  ctx.fillStyle = '#2563eb';
-  ctx.roundRect(4, 4, 248, 72, 16);
-  ctx.fill();
-  ctx.lineWidth = 6;
-  ctx.strokeStyle = '#ffffff';
-  ctx.stroke();
-  ctx.fillStyle = '#ffffff';
-  ctx.font = 'bold 36px "Segoe UI", sans-serif';
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
-  ctx.fillText(badgeText, 128, 40);
-
-  const badgeTex = new THREE.CanvasTexture(canvas);
-  const badge = new THREE.Mesh(
-    new THREE.PlaneGeometry(1.6, 0.5),
-    new THREE.MeshBasicMaterial({ map: badgeTex, transparent: true, side: THREE.DoubleSide })
-  );
-  badge.position.set(0, 4.3, 0);
-  portal.add(badge);
-
-  // Energy Field
-  const energy = new THREE.Mesh(
-    new THREE.RingGeometry(0.3, 1.35, 24),
-    new THREE.MeshBasicMaterial({ color: 0x38bdf8, transparent: true, opacity: 0.5, side: THREE.DoubleSide })
-  );
-  energy.position.set(0, 1.6, 0);
-  portal.add(energy);
-
-  scene.add(portal);
-
-  timePortals.push({ portal, hand, energy, x, z, eraTarget, eraName, active: false });
-}
-
-// Clock Portal 1 (unlocked after defeating Encounter 1 at z = -44)
-createTimeClockPortal(0, -44, 2, 'MEDIEVAL ARCHER', 'Level 1');
-
-// ----------------------------------------------------------------------------
-// 6. Character Rig Construction
-// ----------------------------------------------------------------------------
-function buildStylizedHumanoid(isHero = false, isEnemy = false) {
+function buildHumanoidCharacter(isLeader = false, isEnemy = false, maxHp = 100) {
   const root = new THREE.Group();
-  const skinMat = isEnemy ? MAT.enemySkin : MAT.skin;
-  const armorMat = isEnemy ? MAT.enemyArmor : MAT.armor;
+  const skinMat = isEnemy ? MAT.skinEnemy : MAT.skinHero;
+  const armorMat = isEnemy ? MAT.armorEnemy : MAT.armorHero;
 
   // Head
   const head = new THREE.Mesh(new THREE.SphereGeometry(0.3, 16, 12), skinMat);
@@ -524,14 +332,14 @@ function buildStylizedHumanoid(isHero = false, isEnemy = false) {
   head.castShadow = true;
   root.add(head);
 
-  // Helmet with crest for Hero
-  if (isHero) {
+  // Helmet with crest for Squad Leader
+  if (isLeader) {
     const helm = new THREE.Mesh(new THREE.CylinderGeometry(0.34, 0.35, 0.32, 16), armorMat);
     helm.position.y = 1.45;
     helm.castShadow = true;
     root.add(helm);
 
-    const crest = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.22, 0.45), MAT.crest);
+    const crest = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.24, 0.45), MAT.crest);
     crest.position.set(0, 1.68, 0);
     crest.castShadow = true;
     root.add(crest);
@@ -548,7 +356,7 @@ function buildStylizedHumanoid(isHero = false, isEnemy = false) {
   torso.castShadow = true;
   root.add(torso);
 
-  // Arms & Legs
+  // Arms
   const armGeo = new THREE.CapsuleGeometry(0.09, 0.4, 6, 8);
   const leftArm = new THREE.Mesh(armGeo, skinMat);
   leftArm.position.set(-0.38, 0.75, 0);
@@ -558,6 +366,7 @@ function buildStylizedHumanoid(isHero = false, isEnemy = false) {
   rightArm.position.set(0.38, 0.75, 0);
   root.add(rightArm);
 
+  // Legs
   const legGeo = new THREE.CapsuleGeometry(0.1, 0.42, 6, 8);
   const leftLeg = new THREE.Mesh(legGeo, skinMat);
   leftLeg.position.set(-0.16, 0.28, 0);
@@ -567,386 +376,336 @@ function buildStylizedHumanoid(isHero = false, isEnemy = false) {
   rightLeg.position.set(0.16, 0.28, 0);
   root.add(rightLeg);
 
+  // Sword weapon
   const weaponHolder = new THREE.Group();
   weaponHolder.position.set(0.42, 0.65, -0.2);
-  root.add(weaponHolder);
 
-  return { root, head, torso, leftArm, rightArm, leftLeg, rightLeg, weaponHolder };
-}
-
-// Weapon Models
-function buildSword() {
-  const g = new THREE.Group();
-  const blade = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.82, 0.04), MAT.armor);
-  blade.position.y = 0.41;
+  const sword = new THREE.Group();
+  const blade = new THREE.Mesh(new THREE.BoxGeometry(0.09, 0.8, 0.04), MAT.blade);
+  blade.position.y = 0.4;
   blade.castShadow = true;
-  g.add(blade);
-  const guard = new THREE.Mesh(new THREE.BoxGeometry(0.32, 0.05, 0.08), MAT.gold);
+  sword.add(blade);
+
+  const guard = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.05, 0.08), MAT.gold);
   guard.position.y = 0.02;
-  g.add(guard);
+  sword.add(guard);
+
   const hilt = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.04, 0.2, 8), MAT.woodPost);
   hilt.position.y = -0.1;
-  g.add(hilt);
-  g.rotation.x = Math.PI / 3;
-  return g;
-}
+  sword.add(hilt);
 
-function buildBow() {
-  const g = new THREE.Group();
-  const arc = new THREE.Mesh(new THREE.TorusGeometry(0.45, 0.04, 6, 16, Math.PI * 0.85), MAT.woodPlank);
-  arc.rotation.z = Math.PI / 1.15;
-  g.add(arc);
-  const string = new THREE.Mesh(new THREE.CylinderGeometry(0.01, 0.01, 0.8, 4), new THREE.MeshBasicMaterial({ color: 0xffffff }));
-  string.position.x = 0.15;
-  g.add(string);
-  g.rotation.x = Math.PI / 4;
-  return g;
-}
+  sword.rotation.x = Math.PI / 3;
+  weaponHolder.add(sword);
+  root.add(weaponHolder);
 
-// ----------------------------------------------------------------------------
-// 7. SINGLE Player Character Initialization (Requirements Check: Exactly 1 Player!)
-// ----------------------------------------------------------------------------
-const heroRig = buildStylizedHumanoid(true, false);
-const heroMesh = heroRig.root;
-heroMesh.position.set(0, 0, 15); // Starts alone on approach road
-scene.add(heroMesh);
-
-const heroState = {
-  hp: 100,
-  maxHp: 100,
-  era: 1,
-  weapon: 'sword',
-  pos: heroMesh.position,
-  velocity: new THREE.Vector3(0, 0, 0),
-  speed: 9.5,
-  headingAngle: 0,
-  isRolling: false,
-  rollTimer: 0,
-  attackCooldown: 0,
-  kills: 0,
-  isAlive: true,
-};
-
-let currentWeaponMesh = buildSword();
-heroRig.weaponHolder.add(currentWeaponMesh);
-
-function equipHeroWeapon(type) {
-  heroState.weapon = type;
-  heroRig.weaponHolder.remove(currentWeaponMesh);
-  currentWeaponMesh = type === 'sword' ? buildSword() : buildBow();
-  heroRig.weaponHolder.add(currentWeaponMesh);
-
-  document.getElementById('weapon-icon').textContent = type === 'sword' ? '⚔️' : '🏹';
-  document.getElementById('weapon-name').textContent = type === 'sword' ? 'IRON BROADSWORD' : 'HUNTER LONGBOW';
-}
-
-// ----------------------------------------------------------------------------
-// 8. Friendly Squad Collection System (Placed ahead along the route!)
-// ----------------------------------------------------------------------------
-const squadMembers = []; // Starts completely EMPTY (only 1 player at level start!)
-
-const rescueRecruits = [
-  { x: -1.0, z: -14, recruited: false, name: 'Sargent Leo' },
-  { x: 1.0, z: -55, recruited: false, name: 'Archer Maya' },
-];
-
-rescueRecruits.forEach((rec) => {
-  const rig = buildStylizedHumanoid(false, false);
-  rig.root.position.set(rec.x, 0, rec.z);
-
-  const sword = buildSword();
-  rig.weaponHolder.add(sword);
-  scene.add(rig.root);
-
-  // Pulsing rescue beacon ring
-  const beacon = new THREE.Mesh(
-    new THREE.RingGeometry(0.6, 0.9, 24),
-    new THREE.MeshBasicMaterial({ color: 0xf59e0b, side: THREE.DoubleSide })
-  );
-  beacon.rotation.x = -Math.PI / 2;
-  beacon.position.y = 0.05;
-  rig.root.add(beacon);
-
-  rec.rig = rig;
-  rec.beacon = beacon;
-});
-
-function recruitAlly(rec) {
-  rec.recruited = true;
-  rec.beacon.visible = false;
-  audio.playAllyRescue();
-
-  // Jump animation
-  rec.rig.root.position.y = 1.0;
-
-  const slotIndex = squadMembers.length;
-  const offsetX = slotIndex % 2 === 0 ? -1.0 : 1.0;
-  const offsetZ = 1.4 + Math.floor(slotIndex / 2) * 1.1;
-
-  squadMembers.push({
-    rig: rec.rig,
-    offsetX,
-    offsetZ,
-    weaponMesh: rec.rig.weaponHolder.children[0],
-    attackCooldown: 0,
-    targetEnemy: null,
-  });
-
-  document.getElementById('hud-squad').textContent = `${squadMembers.length + 1} HEROES`;
-  triggerEventBanner(`ALLY RECRUITED: ${rec.name}!`);
-}
-
-// ----------------------------------------------------------------------------
-// 9. Encounter-Based State Machine & Arena Locking Barriers
-// ----------------------------------------------------------------------------
-/**
- * Game State Flow:
- * EXPLORATION -> ENCOUNTER_START -> COMBAT -> VICTORY -> REWARD -> EXPLORATION
- */
-let gameState = 'EXPLORATION';
-
-const combatVignette = document.getElementById('combat-vignette');
-const encounterPill = document.getElementById('encounter-pill');
-const encounterDot = document.getElementById('encounter-dot');
-const encounterStatusText = document.getElementById('encounter-status-text');
-
-// Arena Barrier Meshes (Block forward & backward progression during combat!)
-const arenaBarriers = [];
-
-function createArenaBarrier(z) {
-  const barrierGeo = new THREE.BoxGeometry(ROAD_WIDTH, 2.5, 0.2);
-  const barrier = new THREE.Mesh(barrierGeo, MAT.barrierRed);
-  barrier.position.set(0, 1.25, z);
-  barrier.visible = false;
-  scene.add(barrier);
-  arenaBarriers.push({ mesh: barrier, z });
-  return barrier;
-}
-
-const barrierFront1 = createArenaBarrier(-40.0); // Blocks forward progression past Encounter 1
-const barrierBack1 = createArenaBarrier(-22.0);  // Blocks running away from Encounter 1
-
-// Active Encounter Definitions
-const encounters = [
-  {
-    id: 1,
-    triggerZ: -25.0, // Entered at z = -25
-    arenaBounds: { minZ: -40.0, maxZ: -22.0 },
-    started: false,
-    completed: false,
-    enemies: [],
-  },
-];
-
-function triggerEncounterStart(enc) {
-  enc.started = true;
-  gameState = 'COMBAT';
-
-  // Lock barriers! Player CANNOT escape or bypass the combat arena
-  barrierFront1.visible = true;
-  barrierBack1.visible = true;
-
-  combatVignette.classList.add('active');
-  encounterPill.classList.add('combat-active');
-  encounterDot.textContent = '🔴';
-  encounterStatusText.textContent = 'COMBAT LOCKDOWN';
-
-  audio.playAlertSting();
-  triggerEventBanner('⚠️ ENCOUNTER STARTED! DEFEAT ALL FOES!', 'encounter-alert');
-
-  // Alert all enemies in this encounter
-  enc.enemies.forEach((enemy) => {
-    enemy.state = 'chase';
-  });
-}
-
-function checkEncounterVictory(enc) {
-  const allDead = enc.enemies.every((e) => !e.alive);
-  if (allDead && !enc.completed) {
-    enc.completed = true;
-    gameState = 'VICTORY';
-
-    audio.playVictory();
-    triggerEventBanner('🏆 VICTORY! ROUTE UNLOCKED!', 'victory');
-
-    // Unlock barriers!
-    barrierFront1.visible = false;
-    barrierBack1.visible = false;
-
-    combatVignette.classList.remove('active');
-    encounterPill.classList.remove('combat-active');
-    encounterDot.textContent = '🟢';
-    encounterStatusText.textContent = 'EXPLORATION';
-
-    setTimeout(() => {
-      gameState = 'EXPLORATION';
-      triggerEventBanner('TIME SHIFT PORTAL AHEAD UNLOCKED!');
-    }, 2800);
-  }
-}
-
-// ----------------------------------------------------------------------------
-// 10. REAL Combat System: Enemies with AI, Attacks, Hit-Stop & Feedback
-// ----------------------------------------------------------------------------
-const enemies = [];
-const projectiles = [];
-let hitStopTimer = 0; // Freeze-frame duration for juicy impact feel
-
-function spawnEnemy(x, z, type = 'grunt', encounterId = 1) {
-  const rig = buildStylizedHumanoid(false, true);
-  rig.root.position.set(x, 0, z);
-
-  const weaponMesh = type === 'grunt' ? buildSword() : buildBow();
-  rig.weaponHolder.add(weaponMesh);
-  scene.add(rig.root);
-
-  // Health Bar
+  // Overhead Canvas Billboard Health Bar & Numeric Value
   const hpCanvas = document.createElement('canvas');
-  hpCanvas.width = 128;
-  hpCanvas.height = 20;
+  hpCanvas.width = 160;
+  hpCanvas.height = 36;
   const hpCtx = hpCanvas.getContext('2d');
   const hpTexture = new THREE.CanvasTexture(hpCanvas);
 
-  const hpBar = new THREE.Mesh(
-    new THREE.PlaneGeometry(1.2, 0.18),
+  const hpBillboard = new THREE.Mesh(
+    new THREE.PlaneGeometry(1.4, 0.32),
     new THREE.MeshBasicMaterial({ map: hpTexture, transparent: true, side: THREE.DoubleSide })
   );
-  hpBar.position.y = 1.9;
-  rig.root.add(hpBar);
+  hpBillboard.position.y = 2.15;
+  root.add(hpBillboard);
 
-  const maxHp = type === 'grunt' ? 80 : 60;
-
-  const enemy = {
-    rig,
-    hpBar,
+  const character = {
+    root,
+    head,
+    torso,
+    leftArm,
+    rightArm,
+    leftLeg,
+    rightLeg,
+    weaponHolder,
+    sword,
+    hpBillboard,
+    hpCanvas,
     hpCtx,
     hpTexture,
-    type,
-    encounterId,
+    isLeader,
+    isEnemy,
     hp: maxHp,
     maxHp,
-    pos: rig.root.position,
-    state: 'idle', // 'idle', 'chase', 'windup', 'attack', 'dead'
-    attackTimer: 0,
-    windupTimer: 0,
-    headingAngle: Math.PI,
     alive: true,
+    target: null,
+    attackCooldown: Math.random() * 0.4,
+    walkPhase: Math.random() * Math.PI * 2,
+    hitFlashTimer: 0,
   };
 
-  updateEnemyHP(enemy);
-  enemies.push(enemy);
-
-  const parentEnc = encounters.find((e) => e.id === encounterId);
-  if (parentEnc) parentEnc.enemies.push(enemy);
-
-  return enemy;
+  updateCharacterHealthBillboard(character);
+  return character;
 }
 
-function updateEnemyHP(enemy) {
-  const ctx = enemy.hpCtx;
-  ctx.clearRect(0, 0, 128, 20);
-  ctx.fillStyle = 'rgba(0,0,0,0.7)';
-  ctx.fillRect(0, 0, 128, 20);
-  const pct = Math.max(0, enemy.hp / enemy.maxHp);
-  ctx.fillStyle = '#ef4444';
-  ctx.fillRect(2, 2, 124 * pct, 16);
-  enemy.hpTexture.needsUpdate = true;
+function updateCharacterHealthBillboard(char) {
+  const ctx = char.hpCtx;
+  ctx.clearRect(0, 0, 160, 36);
+
+  // Background frame
+  ctx.fillStyle = 'rgba(15, 23, 42, 0.85)';
+  ctx.roundRect(4, 4, 152, 28, 6);
+  ctx.fill();
+  ctx.lineWidth = 2;
+  ctx.strokeStyle = char.isEnemy ? '#ef4444' : '#38bdf8';
+  ctx.stroke();
+
+  // Health fill
+  const pct = Math.max(0, char.hp / char.maxHp);
+  const fillWidth = 144 * pct;
+  ctx.fillStyle = char.isEnemy ? '#ef4444' : '#22c55e';
+  ctx.roundRect(8, 8, fillWidth, 20, 4);
+  ctx.fill();
+
+  // Numeric text: e.g. "100 / 100"
+  ctx.fillStyle = '#ffffff';
+  ctx.font = 'bold 15px "Segoe UI", Arial, sans-serif';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.shadowColor = 'rgba(0,0,0,0.85)';
+  ctx.shadowBlur = 4;
+  ctx.fillText(`${Math.ceil(char.hp)} / ${char.maxHp}`, 80, 18);
+
+  char.hpTexture.needsUpdate = true;
 }
 
-// Spawn Encounter 1 Enemies (Inside arena z = -26 to -38)
-spawnEnemy(-1.2, -30, 'grunt', 1);
-spawnEnemy(1.2, -30, 'grunt', 1);
-spawnEnemy(0, -36, 'archer', 1);
+// ----------------------------------------------------------------------------
+// 6. Starting Character: Exactly ONE Player
+// ----------------------------------------------------------------------------
+const heroLeader = buildHumanoidCharacter(true, false, 100);
+heroLeader.root.position.set(0, 0, 15);
+scene.add(heroLeader.root);
 
-// Weapon swing trail mesh
-const slashGeo = new THREE.RingGeometry(0.8, 1.8, 16, 1, 0, Math.PI * 0.75);
-const slashMat = new THREE.MeshBasicMaterial({ color: 0x38bdf8, transparent: true, opacity: 0, side: THREE.DoubleSide });
-const slashMesh = new THREE.Mesh(slashGeo, slashMat);
-slashMesh.rotation.x = -Math.PI / 2;
-scene.add(slashMesh);
+// Player state
+const playerState = {
+  pos: heroLeader.root.position,
+  velocity: new THREE.Vector3(0, 0, 0),
+  speed: 13.5,
+  headingAngle: 0,
+  isRolling: false,
+  rollTimer: 0,
+};
 
-function triggerHeroAttack() {
-  if (heroState.attackCooldown > 0 || !heroState.isAlive) return;
-  heroState.attackCooldown = 0.45;
-  audio.playSwordSwing();
+// Squad followers list (starts completely EMPTY, as required!)
+const squadMembers = [];
 
-  // Attack swing animation
-  heroRig.rightArm.rotation.x = -Math.PI / 1.6;
+function updateHUDCounts() {
+  const currentSquadCount = 1 + squadMembers.length;
+  document.getElementById('hud-squad-count').textContent = `SQUAD: ${currentSquadCount}`;
 
-  const fwd = new THREE.Vector3(Math.sin(heroState.headingAngle), 0, Math.cos(heroState.headingAngle));
+  // Calculate real total player squad health
+  let totalHeroHp = heroLeader.alive ? heroLeader.hp : 0;
+  let totalHeroMax = heroLeader.maxHp;
 
-  if (heroState.weapon === 'sword') {
-    slashMesh.position.copy(heroState.pos).addScaledVector(fwd, 1.1);
-    slashMesh.position.y = 0.8;
-    slashMesh.rotation.z = -heroState.headingAngle;
-    slashMat.opacity = 0.85;
-
-    // Check hit against enemies
-    for (const enemy of enemies) {
-      if (!enemy.alive) continue;
-      const dist = enemy.pos.distanceTo(heroState.pos);
-      if (dist < 2.4) {
-        damageEnemy(enemy, 35);
-      }
+  squadMembers.forEach((m) => {
+    if (m.alive) {
+      totalHeroHp += m.hp;
+      totalHeroMax += m.maxHp;
     }
-  } else {
-    // Arrow
-    spawnArrow(heroState.pos.clone().add(new THREE.Vector3(0, 0.8, 0)), fwd, 45);
-  }
-}
-
-function damageEnemy(enemy, dmg) {
-  enemy.hp -= dmg;
-  updateEnemyHP(enemy);
-  audio.playHitImpact();
-
-  // Hit-stop impact pause!
-  hitStopTimer = 0.05;
-
-  // Stagger knockback
-  const knock = enemy.pos.clone().sub(heroState.pos).normalize();
-  enemy.pos.addScaledVector(knock, 0.7);
-
-  showDamageNumber(enemy.pos, `-${dmg}`);
-
-  if (enemy.hp <= 0 && enemy.alive) {
-    enemy.alive = false;
-    enemy.state = 'dead';
-    heroState.kills += 1;
-    document.getElementById('hud-kills').textContent = heroState.kills;
-
-    // Death collapse
-    enemy.rig.root.rotation.x = -Math.PI / 2;
-    enemy.rig.root.position.y = 0.2;
-
-    const enc = encounters.find((e) => e.id === enemy.encounterId);
-    if (enc) checkEncounterVictory(enc);
-  }
-}
-
-function spawnArrow(pos, dir, dmg) {
-  const arrowGeo = new THREE.CylinderGeometry(0.03, 0.03, 0.8, 6);
-  const arrow = new THREE.Mesh(arrowGeo, MAT.woodPlank);
-  arrow.rotation.x = Math.PI / 2;
-  arrow.position.copy(pos);
-  scene.add(arrow);
-
-  projectiles.push({
-    mesh: arrow,
-    dir: dir.clone().normalize(),
-    speed: 26,
-    life: 1.2,
-    damage: dmg,
   });
+
+  document.getElementById('hud-hero-hp').textContent = `${Math.ceil(totalHeroHp)} / ${totalHeroMax}`;
+  const heroPct = totalHeroMax > 0 ? (totalHeroHp / totalHeroMax) * 100 : 0;
+  document.getElementById('hero-hp-fill').style.width = `${heroPct}%`;
+
+  // Calculate real enemy army health
+  let totalEnemyHp = 0;
+  let totalEnemyMax = 0;
+  let livingEnemies = 0;
+
+  enemySquad.forEach((e) => {
+    if (e.alive) {
+      totalEnemyHp += e.hp;
+      livingEnemies++;
+    }
+    totalEnemyMax += e.maxHp;
+  });
+
+  document.getElementById('hud-enemy-count').textContent = `ENEMIES: ${livingEnemies}`;
+  document.getElementById('hud-enemy-hp').textContent = `${Math.ceil(totalEnemyHp)} / ${totalEnemyMax}`;
+  const enemyPct = totalEnemyMax > 0 ? (totalEnemyHp / totalEnemyMax) * 100 : 0;
+  document.getElementById('enemy-hp-fill').style.width = `${enemyPct}%`;
 }
 
-function showDamageNumber(pos, text) {
+// ----------------------------------------------------------------------------
+// 7. Math Gates System (+5, +10, -3, ×2)
+// ----------------------------------------------------------------------------
+function createGateTexture(text, isPositive) {
+  const canvas = document.createElement('canvas');
+  canvas.width = 512;
+  canvas.height = 256;
+  const ctx = canvas.getContext('2d');
+
+  const grad = ctx.createLinearGradient(0, 0, 0, 256);
+  if (isPositive) {
+    grad.addColorStop(0, '#0284c7');
+    grad.addColorStop(1, '#0369a1');
+  } else {
+    grad.addColorStop(0, '#dc2626');
+    grad.addColorStop(1, '#991b1b');
+  }
+  ctx.fillStyle = grad;
+  ctx.roundRect(14, 14, 484, 228, 28);
+  ctx.fill();
+
+  ctx.lineWidth = 10;
+  ctx.strokeStyle = '#ffffff';
+  ctx.stroke();
+
+  ctx.fillStyle = '#ffffff';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.font = 'bold 84px "Segoe UI", Arial, sans-serif';
+  ctx.shadowColor = 'rgba(0,0,0,0.8)';
+  ctx.shadowBlur = 14;
+  ctx.fillText(text, 256, 128);
+
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.needsUpdate = true;
+  return texture;
+}
+
+function createSingleGateMesh(text, isPositive, posX) {
+  const group = new THREE.Group();
+  group.position.x = posX;
+
+  const width = 2.8;
+  const height = 2.6;
+
+  // Frame posts
+  const postMat = new THREE.MeshStandardMaterial({ color: 0x1e293b, metalness: 0.85, roughness: 0.3 });
+  const postGeo = new THREE.BoxGeometry(0.14, height, 0.14);
+
+  const lp = new THREE.Mesh(postGeo, postMat);
+  lp.position.set(-width / 2, height / 2, 0);
+  group.add(lp);
+
+  const rp = new THREE.Mesh(postGeo, postMat);
+  rp.position.set(width / 2, height / 2, 0);
+  group.add(rp);
+
+  const topBar = new THREE.Mesh(new THREE.BoxGeometry(width + 0.14, 0.16, 0.16), postMat);
+  topBar.position.set(0, height + 0.08, 0);
+  group.add(topBar);
+
+  // Glowing energy barrier
+  const barrierMat = new THREE.MeshStandardMaterial({
+    color: isPositive ? 0x0ea5e9 : 0xef4444,
+    transparent: true,
+    opacity: 0.65,
+    roughness: 0.1,
+    side: THREE.DoubleSide,
+  });
+  const barrier = new THREE.Mesh(new THREE.PlaneGeometry(width - 0.08, height - 0.08), barrierMat);
+  barrier.position.set(0, height / 2, 0);
+  group.add(barrier);
+
+  // Gate Label
+  const labelTex = createGateTexture(text, isPositive);
+  const label = new THREE.Mesh(
+    new THREE.PlaneGeometry(2.35, 1.15),
+    new THREE.MeshBasicMaterial({ map: labelTex, transparent: true, side: THREE.DoubleSide })
+  );
+  label.position.set(0, height / 2, 0.035);
+  group.add(label);
+
+  return group;
+}
+
+function createMathGatePair(z, leftCfg, rightCfg) {
+  const pairGroup = new THREE.Group();
+  pairGroup.position.set(0, 0, z);
+
+  const leftGateMesh = createSingleGateMesh(leftCfg.label, leftCfg.isPositive, -1.5);
+  const rightGateMesh = createSingleGateMesh(rightCfg.label, rightCfg.isPositive, 1.5);
+
+  pairGroup.add(leftGateMesh);
+  pairGroup.add(rightGateMesh);
+  scene.add(pairGroup);
+
+  return {
+    group: pairGroup,
+    z,
+    left: leftCfg,
+    right: rightCfg,
+    triggered: false,
+  };
+}
+
+// Gate Pairs on the track:
+// 1. z = -20: Left +5, Right +10
+// 2. z = -50: Left -3, Right +5
+// 3. z = -80: Left x2, Right +10
+const mathGatePairs = [
+  createMathGatePair(-20, { op: 'add', val: 5, label: '+5', isPositive: true }, { op: 'add', val: 10, label: '+10', isPositive: true }),
+  createMathGatePair(-50, { op: 'sub', val: 3, label: '-3', isPositive: false }, { op: 'add', val: 5, label: '+5', isPositive: true }),
+  createMathGatePair(-80, { op: 'mul', val: 2, label: '×2', isPositive: true }, { op: 'add', val: 10, label: '+10', isPositive: true }),
+];
+
+// Helper: Formation slot positions for followers behind leader
+function getFormationSlot(index) {
+  const colIndex = index % 3;
+  const row = Math.floor(index / 3) + 1;
+  const colOffsets = [-0.95, 0.95, 0.0];
+  return {
+    offsetX: colOffsets[colIndex],
+    offsetZ: 1.1 + row * 1.15,
+  };
+}
+
+function applyMathGate(cfg, posX) {
+  let currentSquad = 1 + squadMembers.length;
+  let targetSquad = currentSquad;
+
+  if (cfg.op === 'add') {
+    targetSquad += cfg.val;
+    audio.playGatePositive();
+    showFloatingFeedback(new THREE.Vector3(posX, 2.5, playerState.pos.z), `+${cfg.val} SQUAD`, true);
+    triggerAnnouncement(`SQUAD INCREASED! +${cfg.val}`, 'positive');
+  } else if (cfg.op === 'mul') {
+    targetSquad *= cfg.val;
+    audio.playGatePositive();
+    showFloatingFeedback(new THREE.Vector3(posX, 2.5, playerState.pos.z), `×${cfg.val} SQUAD!`, true);
+    triggerAnnouncement(`SQUAD MULTIPLIED! ×${cfg.val}`, 'positive');
+  } else if (cfg.op === 'sub') {
+    targetSquad = Math.max(1, targetSquad - cfg.val);
+    audio.playGateNegative();
+    showFloatingFeedback(new THREE.Vector3(posX, 2.5, playerState.pos.z), `-${cfg.val} SQUAD`, false);
+    triggerAnnouncement(`SQUAD REDUCED! -${cfg.val}`, 'negative');
+  }
+
+  // Adjust squad followers
+  const targetFollowers = targetSquad - 1;
+
+  if (squadMembers.length < targetFollowers) {
+    const toAdd = targetFollowers - squadMembers.length;
+    for (let i = 0; i < toAdd; i++) {
+      const follower = buildHumanoidCharacter(false, false, 100);
+      follower.root.position.copy(playerState.pos);
+      scene.add(follower.root);
+      squadMembers.push(follower);
+    }
+  } else if (squadMembers.length > targetFollowers) {
+    const toRemove = squadMembers.length - targetFollowers;
+    for (let i = 0; i < toRemove; i++) {
+      const removed = squadMembers.pop();
+      if (removed) scene.remove(removed.root);
+    }
+  }
+
+  updateHUDCounts();
+}
+
+function showFloatingFeedback(worldPos, text, isPositive) {
   const span = document.createElement('span');
-  span.className = 'damage-number';
+  span.className = `floating-text ${isPositive ? 'floating-gate-positive' : 'floating-gate-negative'}`;
   span.textContent = text;
   document.body.appendChild(span);
 
-  const screen = pos.clone().project(camera);
+  const screen = worldPos.clone().project(camera);
   const x = (screen.x * 0.5 + 0.5) * window.innerWidth;
   const y = (-(screen.y * 0.5) + 0.5) * window.innerHeight;
   span.style.left = `${x}px`;
@@ -955,21 +714,93 @@ function showDamageNumber(pos, text) {
   setTimeout(() => span.remove(), 850);
 }
 
+function triggerAnnouncement(text, type = '') {
+  const banner = document.getElementById('announcement-banner');
+  banner.textContent = text;
+  banner.className = `visible ${type}`;
+  setTimeout(() => {
+    banner.className = '';
+  }, 2200);
+}
+
 // ----------------------------------------------------------------------------
-// 11. Dual Keyboard & Mobile Analog Touch Controls
+// 8. Final Enemy Squad & Battle Arena
+// ----------------------------------------------------------------------------
+const enemySquad = [];
+const BATTLE_TRIGGER_Z = -102.0;
+const BATTLE_ARENA_Z = -118.0;
+
+// Arena blocking barrier behind enemy squad
+const arenaBarrier = new THREE.Mesh(
+  new THREE.BoxGeometry(ROAD_WIDTH, 3.5, 0.2),
+  new THREE.MeshStandardMaterial({ color: 0xef4444, transparent: true, opacity: 0.7, side: THREE.DoubleSide })
+);
+arenaBarrier.position.set(0, 1.75, -132);
+scene.add(arenaBarrier);
+
+// Spawn 10 Enemy Grunts (80 HP each) + 1 Enemy Warlord Captain (200 HP) -> Total 1,000 HP
+function initEnemySquad() {
+  // Warlord Captain in center front
+  const captain = buildHumanoidCharacter(false, true, 200);
+  captain.root.scale.set(1.35, 1.35, 1.35);
+  captain.root.position.set(0, 0, BATTLE_ARENA_Z);
+  captain.root.rotation.y = Math.PI; // Facing incoming player
+  scene.add(captain.root);
+  enemySquad.push(captain);
+
+  // 10 Grunts in formation behind and flanking captain
+  for (let i = 0; i < 10; i++) {
+    const grunt = buildHumanoidCharacter(false, true, 80);
+    const col = (i % 5) - 2; // -2, -1, 0, 1, 2
+    const row = Math.floor(i / 5);
+    const ex = col * 1.1;
+    const ez = BATTLE_ARENA_Z - 1.4 - row * 1.3;
+
+    grunt.root.position.set(ex, 0, ez);
+    grunt.root.rotation.y = Math.PI;
+    scene.add(grunt.root);
+    enemySquad.push(grunt);
+  }
+
+  updateHUDCounts();
+}
+
+initEnemySquad();
+
+// ----------------------------------------------------------------------------
+// 9. Combat Simulation State Machine
+// ----------------------------------------------------------------------------
+let battleActive = false;
+let battleResolved = false;
+
+function startFinalBattle() {
+  if (battleActive || battleResolved) return;
+  battleActive = true;
+  triggerAnnouncement('⚔️ FINAL SQUAD BATTLE ENGAGED!', 'battle');
+}
+
+function resolveBattleVictory() {
+  battleActive = false;
+  battleResolved = true;
+  audio.playVictoryFanfare();
+  document.getElementById('modal-victory').classList.add('visible');
+}
+
+function resolveBattleDefeat() {
+  battleActive = false;
+  battleResolved = true;
+  audio.playDefeatSting();
+  document.getElementById('modal-defeat').classList.add('visible');
+}
+
+// ----------------------------------------------------------------------------
+// 10. Input System (Keyboard + Virtual Analog Touch Joystick)
 // ----------------------------------------------------------------------------
 const inputVector = { x: 0, z: 0 };
 const keysDown = {};
 
 window.addEventListener('keydown', (e) => {
   keysDown[e.code] = true;
-  if (e.code === 'Space') {
-    triggerHeroAttack();
-    e.preventDefault();
-  }
-  if (e.code === 'KeyQ') {
-    equipHeroWeapon(heroState.weapon === 'sword' ? 'bow' : 'sword');
-  }
   if (e.code === 'ShiftLeft' || e.code === 'ShiftRight') {
     triggerDodgeRoll();
   }
@@ -1025,68 +856,26 @@ joystickContainer.addEventListener('pointerdown', onPointerDown);
 window.addEventListener('pointermove', onPointerMove);
 window.addEventListener('pointerup', onPointerUp);
 
-// UI Action Buttons
-document.getElementById('btn-attack').addEventListener('click', triggerHeroAttack);
-document.getElementById('btn-swap').addEventListener('click', () => {
-  equipHeroWeapon(heroState.weapon === 'sword' ? 'bow' : 'sword');
-});
 document.getElementById('btn-dodge').addEventListener('click', triggerDodgeRoll);
-document.getElementById('btn-retry').addEventListener('click', restartLevel);
+document.getElementById('btn-retry').addEventListener('click', restartGame);
+document.getElementById('btn-victory-replay').addEventListener('click', restartGame);
 
 function triggerDodgeRoll() {
-  if (heroState.isRolling || !heroState.isAlive) return;
-  heroState.isRolling = true;
-  heroState.rollTimer = 0.35;
-  heroState.velocity.multiplyScalar(1.9);
+  if (playerState.isRolling || battleActive) return;
+  playerState.isRolling = true;
+  playerState.rollTimer = 0.35;
+  playerState.velocity.multiplyScalar(1.9);
 }
 
-function triggerEventBanner(text, type = '') {
-  const banner = document.getElementById('event-banner');
-  banner.textContent = text;
-  banner.className = `visible ${type}`;
-  setTimeout(() => {
-    banner.className = '';
-  }, 2500);
-}
-
-function restartLevel() {
-  heroState.hp = 100;
-  heroState.isAlive = true;
-  heroState.pos.set(0, 0, 15);
-  heroMesh.rotation.set(0, 0, 0);
-
-  document.getElementById('defeat-modal').classList.remove('visible');
-  document.getElementById('player-health-fill').style.width = '100%';
-  document.getElementById('hud-hp').textContent = '100 / 100';
-
-  // Reset Encounters
-  encounters.forEach((e) => {
-    e.started = false;
-    e.completed = false;
-    e.enemies.forEach((enemy) => {
-      enemy.hp = enemy.maxHp;
-      enemy.alive = true;
-      enemy.state = 'idle';
-      enemy.rig.root.rotation.set(0, Math.PI, 0);
-      enemy.rig.root.position.copy(enemy.pos);
-      updateEnemyHP(enemy);
-    });
-  });
-
-  barrierFront1.visible = false;
-  barrierBack1.visible = false;
-  combatVignette.classList.remove('active');
-  encounterPill.classList.remove('combat-active');
-  encounterDot.textContent = '🟢';
-  encounterStatusText.textContent = 'EXPLORATION';
-  gameState = 'EXPLORATION';
+function restartGame() {
+  window.location.reload();
 }
 
 // ----------------------------------------------------------------------------
-// 12. Main Game Loop (Physics, Combat AI, Squad Support, Camera)
+// 11. Main Animation & Combat Loop
 // ----------------------------------------------------------------------------
 const clock = new THREE.Clock();
-let walkAnimTime = 0;
+let walkCycle = 0;
 const camTargetPos = new THREE.Vector3();
 const camLookTarget = new THREE.Vector3();
 
@@ -1095,266 +884,271 @@ function animate() {
 
   const delta = Math.min(clock.getDelta(), 0.1);
 
-  // Hit-stop pause
-  if (hitStopTimer > 0) {
-    hitStopTimer -= delta;
-    renderer.render(scene, camera);
-    return;
-  }
+  // 1. Player Manual Movement (Only when not in battle and alive)
+  if (!battleActive && !battleResolved && heroLeader.alive) {
+    let kbX = 0;
+    let kbZ = 0;
+    if (keysDown['KeyW'] || keysDown['ArrowUp']) kbZ -= 1;
+    if (keysDown['KeyS'] || keysDown['ArrowDown']) kbZ += 1;
+    if (keysDown['KeyA'] || keysDown['ArrowLeft']) kbX -= 1;
+    if (keysDown['KeyD'] || keysDown['ArrowRight']) kbX += 1;
 
-  // 1. Gather Movement Input
-  let kbX = 0;
-  let kbZ = 0;
-  if (keysDown['KeyW'] || keysDown['ArrowUp']) kbZ -= 1;
-  if (keysDown['KeyS'] || keysDown['ArrowDown']) kbZ += 1;
-  if (keysDown['KeyA'] || keysDown['ArrowLeft']) kbX -= 1;
-  if (keysDown['KeyD'] || keysDown['ArrowRight']) kbX += 1;
+    let moveX = inputVector.x !== 0 ? inputVector.x : kbX;
+    let moveZ = inputVector.z !== 0 ? inputVector.z : kbZ;
 
-  let moveX = inputVector.x !== 0 ? inputVector.x : kbX;
-  let moveZ = inputVector.z !== 0 ? inputVector.z : kbZ;
-
-  const len = Math.hypot(moveX, moveZ);
-  if (len > 1.0) {
-    moveX /= len;
-    moveZ /= len;
-  }
-
-  // 2. Camera-Relative Movement Calculation
-  const isMoving = len > 0.1 && heroState.isAlive;
-  const targetVel = new THREE.Vector3(0, 0, 0);
-
-  if (isMoving) {
-    const camFwd = new THREE.Vector3();
-    camera.getWorldDirection(camFwd);
-    camFwd.y = 0;
-    camFwd.normalize();
-
-    const camRight = new THREE.Vector3(-camFwd.z, 0, camFwd.x);
-
-    targetVel.addScaledVector(camRight, moveX);
-    targetVel.addScaledVector(camFwd, -moveZ);
-    targetVel.normalize().multiplyScalar(heroState.speed);
-
-    // Smooth rotation toward movement
-    const targetAngle = Math.atan2(targetVel.x, targetVel.z);
-    heroState.headingAngle = THREE.MathUtils.lerp(heroState.headingAngle, targetAngle, 12 * delta);
-    heroMesh.rotation.y = heroState.headingAngle;
-
-    // Limb walk swing
-    walkAnimTime += delta * 14;
-    heroRig.leftLeg.rotation.x = Math.sin(walkAnimTime) * 0.7;
-    heroRig.rightLeg.rotation.x = -Math.sin(walkAnimTime) * 0.7;
-    heroRig.leftArm.rotation.x = -Math.sin(walkAnimTime) * 0.6;
-    if (heroState.attackCooldown <= 0) {
-      heroRig.rightArm.rotation.x = Math.sin(walkAnimTime) * 0.6;
-    }
-  } else {
-    heroRig.leftLeg.rotation.x = THREE.MathUtils.lerp(heroRig.leftLeg.rotation.x, 0, 10 * delta);
-    heroRig.rightLeg.rotation.x = THREE.MathUtils.lerp(heroRig.rightLeg.rotation.x, 0, 10 * delta);
-    heroRig.leftArm.rotation.x = THREE.MathUtils.lerp(heroRig.leftArm.rotation.x, 0, 10 * delta);
-    if (heroState.attackCooldown <= 0) {
-      heroRig.rightArm.rotation.x = THREE.MathUtils.lerp(heroRig.rightArm.rotation.x, 0, 10 * delta);
-    }
-  }
-
-  heroState.velocity.lerp(targetVel, 14 * delta);
-  heroState.pos.addScaledVector(heroState.velocity, delta);
-
-  // Dodge Roll
-  if (heroState.isRolling) {
-    heroState.rollTimer -= delta;
-    heroMesh.rotation.x = Math.sin((0.35 - heroState.rollTimer) * 18) * 1.5;
-    if (heroState.rollTimer <= 0) {
-      heroState.isRolling = false;
-      heroMesh.rotation.x = 0;
-    }
-  }
-
-  // Attack cooldown
-  if (heroState.attackCooldown > 0) {
-    heroState.attackCooldown -= delta;
-    if (heroState.attackCooldown <= 0) {
-      slashMat.opacity = 0;
-    }
-  }
-
-  // 3. ENCOUNTER ZONE TRIGGER & LOCKDOWN BOUNDARIES
-  const activeEnc = encounters[0];
-  if (!activeEnc.started && heroState.pos.z <= activeEnc.triggerZ) {
-    triggerEncounterStart(activeEnc);
-  }
-
-  // If in combat, BLOCK forward progression so player cannot walk through or around!
-  if (gameState === 'COMBAT') {
-    heroState.pos.z = THREE.MathUtils.clamp(heroState.pos.z, activeEnc.arenaBounds.minZ + 0.5, activeEnc.arenaBounds.maxZ - 0.5);
-  }
-
-  // Road side boundaries
-  if (heroState.pos.z > -50) {
-    const maxRoadX = (ROAD_WIDTH / 2) - 0.4;
-    heroState.pos.x = THREE.MathUtils.clamp(heroState.pos.x, -maxRoadX, maxRoadX);
-  }
-
-  // 4. FRIENDLY RECRUIT CHECK (Walk up to ally to recruit them!)
-  for (const rec of rescueRecruits) {
-    if (!rec.recruited) {
-      const dist = Math.hypot(heroState.pos.x - rec.x, heroState.pos.z - rec.z);
-      if (dist < 1.8) {
-        recruitAlly(rec);
-      }
-    }
-  }
-
-  // 5. SQUAD MEMBERS ACTIVE COMBAT & FORMATION AI
-  for (let i = 0; i < squadMembers.length; i++) {
-    const ally = squadMembers[i];
-
-    // Check if there are active combat enemies nearby
-    let nearestEnemy = null;
-    let nearestDist = 999;
-    if (gameState === 'COMBAT') {
-      for (const e of enemies) {
-        if (!e.alive) continue;
-        const d = ally.rig.root.position.distanceTo(e.pos);
-        if (d < nearestDist) {
-          nearestDist = d;
-          nearestEnemy = e;
-        }
-      }
+    const len = Math.hypot(moveX, moveZ);
+    if (len > 1.0) {
+      moveX /= len;
+      moveZ /= len;
     }
 
-    if (nearestEnemy && nearestDist < 7.0) {
-      // Squad member actively charges enemy and attacks!
-      const toEnemy = nearestEnemy.pos.clone().sub(ally.rig.root.position);
-      const angle = Math.atan2(toEnemy.x, toEnemy.z);
-      ally.rig.root.rotation.y = angle;
+    const isMoving = len > 0.05;
+    const targetVel = new THREE.Vector3(0, 0, 0);
 
-      if (nearestDist > 1.6) {
-        ally.rig.root.position.addScaledVector(toEnemy.normalize(), 6.5 * delta);
-      } else {
-        // Ally attacks!
-        ally.attackCooldown -= delta;
-        if (ally.attackCooldown <= 0) {
-          ally.attackCooldown = 0.8;
-          ally.rig.rightArm.rotation.x = -Math.PI / 1.6;
-          damageEnemy(nearestEnemy, 18);
-          setTimeout(() => {
-            ally.rig.rightArm.rotation.x = 0;
-          }, 200);
-        }
-      }
+    if (isMoving) {
+      const camFwd = new THREE.Vector3();
+      camera.getWorldDirection(camFwd);
+      camFwd.y = 0;
+      camFwd.normalize();
+      const camRight = new THREE.Vector3(-camFwd.z, 0, camFwd.x);
+
+      targetVel.addScaledVector(camRight, moveX);
+      targetVel.addScaledVector(camFwd, -moveZ);
+      targetVel.normalize().multiplyScalar(playerState.speed);
+
+      const targetAngle = Math.atan2(targetVel.x, targetVel.z);
+      playerState.headingAngle = THREE.MathUtils.lerp(playerState.headingAngle, targetAngle, 12 * delta);
+      heroLeader.root.rotation.y = playerState.headingAngle;
+
+      walkCycle += delta * 14;
+      heroLeader.leftLeg.rotation.x = Math.sin(walkCycle) * 0.7;
+      heroLeader.rightLeg.rotation.x = -Math.sin(walkCycle) * 0.7;
+      heroLeader.leftArm.rotation.x = -Math.sin(walkCycle) * 0.6;
+      heroLeader.rightArm.rotation.x = Math.sin(walkCycle) * 0.6;
     } else {
-      // Return to organized formation behind hero
-      const targetPos = heroState.pos.clone()
-        .addScaledVector(new THREE.Vector3(-Math.sin(heroState.headingAngle), 0, -Math.cos(heroState.headingAngle)), ally.offsetZ)
-        .addScaledVector(new THREE.Vector3(Math.cos(heroState.headingAngle), 0, -Math.sin(heroState.headingAngle)), ally.offsetX);
+      heroLeader.leftLeg.rotation.x = THREE.MathUtils.lerp(heroLeader.leftLeg.rotation.x, 0, 10 * delta);
+      heroLeader.rightLeg.rotation.x = THREE.MathUtils.lerp(heroLeader.rightLeg.rotation.x, 0, 10 * delta);
+      heroLeader.leftArm.rotation.x = THREE.MathUtils.lerp(heroLeader.leftArm.rotation.x, 0, 10 * delta);
+      heroLeader.rightArm.rotation.x = THREE.MathUtils.lerp(heroLeader.rightArm.rotation.x, 0, 10 * delta);
+    }
 
-      ally.rig.root.position.lerp(targetPos, 8 * delta);
-      ally.rig.root.rotation.y = heroState.headingAngle;
+    playerState.velocity.lerp(targetVel, 14 * delta);
+    playerState.pos.addScaledVector(playerState.velocity, delta);
+
+    // Keep within road bounds
+    const maxRoadX = (ROAD_WIDTH / 2) - 0.45;
+    playerState.pos.x = THREE.MathUtils.clamp(playerState.pos.x, -maxRoadX, maxRoadX);
+
+    // Dodge Roll
+    if (playerState.isRolling) {
+      playerState.rollTimer -= delta;
+      heroLeader.root.rotation.x = Math.sin((0.35 - playerState.rollTimer) * 18) * 1.5;
+      if (playerState.rollTimer <= 0) {
+        playerState.isRolling = false;
+        heroLeader.root.rotation.x = 0;
+      }
+    }
+
+    // 2. Math Gates Collision Detection
+    for (let i = 0; i < mathGatePairs.length; i++) {
+      const pair = mathGatePairs[i];
+      if (!pair.triggered && playerState.pos.z <= pair.z) {
+        pair.triggered = true;
+        const chosenConfig = playerState.pos.x < 0 ? pair.left : pair.right;
+        const chosenX = playerState.pos.x < 0 ? -1.5 : 1.5;
+        applyMathGate(chosenConfig, chosenX);
+
+        // Fade out gate pair
+        pair.group.children.forEach((c) => {
+          c.scale.set(0.2, 0.2, 0.2);
+          c.visible = false;
+        });
+      }
+    }
+
+    // 3. Final Battle Trigger
+    if (playerState.pos.z <= BATTLE_TRIGGER_Z) {
+      startFinalBattle();
     }
   }
 
-  // 6. ENEMY AI (Flank, Chase, Windup, Strike)
-  for (const enemy of enemies) {
-    if (!enemy.alive) continue;
+  // 4. Followers Marching Behind Player (Outside Battle)
+  if (!battleActive && !battleResolved) {
+    for (let i = 0; i < squadMembers.length; i++) {
+      const follower = squadMembers[i];
+      const slot = getFormationSlot(i);
 
-    const toHero = heroState.pos.clone().sub(enemy.pos);
-    const distToHero = toHero.length();
+      const targetPos = playerState.pos.clone()
+        .addScaledVector(new THREE.Vector3(-Math.sin(playerState.headingAngle), 0, -Math.cos(playerState.headingAngle)), slot.offsetZ)
+        .addScaledVector(new THREE.Vector3(Math.cos(playerState.headingAngle), 0, -Math.sin(playerState.headingAngle)), slot.offsetX);
 
-    if (enemy.state === 'chase' || gameState === 'COMBAT') {
-      const targetAngle = Math.atan2(toHero.x, toHero.z);
-      enemy.headingAngle = THREE.MathUtils.lerp(enemy.headingAngle, targetAngle, 8 * delta);
-      enemy.rig.root.rotation.y = enemy.headingAngle;
+      follower.root.position.lerp(targetPos, 8 * delta);
+      follower.root.rotation.y = playerState.headingAngle;
 
-      if (distToHero > 1.6) {
-        // Move towards hero
-        enemy.pos.addScaledVector(toHero.normalize(), 5.2 * delta);
-        enemy.rig.leftLeg.rotation.x = Math.sin(clock.getElapsedTime() * 12) * 0.6;
-        enemy.rig.rightLeg.rotation.x = -Math.sin(clock.getElapsedTime() * 12) * 0.6;
-      } else {
-        // In Attack Range: Windup & Strike!
-        enemy.attackTimer += delta;
-        if (enemy.attackTimer > 0.9) {
-          enemy.attackTimer = 0;
-          audio.playHitImpact();
+      const fWalk = walkCycle + i * 0.4;
+      follower.leftLeg.rotation.x = Math.sin(fWalk) * 0.65;
+      follower.rightLeg.rotation.x = -Math.sin(fWalk) * 0.65;
+    }
+  }
 
-          // Damage Hero
-          heroState.hp = Math.max(0, heroState.hp - 14);
-          document.getElementById('player-health-fill').style.width = `${heroState.hp}%`;
-          document.getElementById('hud-hp').textContent = `${Math.ceil(heroState.hp)} / 100`;
-          showDamageNumber(heroState.pos, '-14');
+  // 5. AUTOMATIC SQUAD BATTLE SIMULATION
+  if (battleActive) {
+    const allLivingHeroes = [heroLeader, ...squadMembers].filter((h) => h.alive);
+    const allLivingEnemies = enemySquad.filter((e) => e.alive);
 
-          // Check Hero Defeat
-          if (heroState.hp <= 0 && heroState.isAlive) {
-            heroState.isAlive = false;
-            document.getElementById('defeat-modal').classList.add('visible');
+    // Check Victory
+    if (allLivingEnemies.length === 0) {
+      resolveBattleVictory();
+      return;
+    }
+
+    // Check Defeat
+    if (allLivingHeroes.length === 0) {
+      resolveBattleDefeat();
+      return;
+    }
+
+    // Heroes AI: Attack Enemies
+    allLivingHeroes.forEach((hero) => {
+      // Find nearest living enemy target
+      if (!hero.target || !hero.target.alive) {
+        let bestDist = 999;
+        allLivingEnemies.forEach((e) => {
+          const d = hero.root.position.distanceTo(e.root.position);
+          if (d < bestDist) {
+            bestDist = d;
+            hero.target = e;
+          }
+        });
+      }
+
+      if (hero.target) {
+        const toTarget = hero.target.root.position.clone().sub(hero.root.position);
+        const dist = toTarget.length();
+        const angle = Math.atan2(toTarget.x, toTarget.z);
+        hero.root.rotation.y = angle;
+
+        if (dist > 1.6) {
+          // Charge forward
+          hero.root.position.addScaledVector(toTarget.normalize(), 6.5 * delta);
+          hero.walkPhase += delta * 14;
+          hero.leftLeg.rotation.x = Math.sin(hero.walkPhase) * 0.7;
+          hero.rightLeg.rotation.x = -Math.sin(hero.walkPhase) * 0.7;
+        } else {
+          // Attack in melee range!
+          hero.attackCooldown -= delta;
+          if (hero.attackCooldown <= 0) {
+            hero.attackCooldown = 0.65 + Math.random() * 0.2;
+            audio.playSwordSwing();
+
+            // Melee sword swing animation
+            hero.rightArm.rotation.x = -Math.PI / 1.5;
+            setTimeout(() => {
+              if (hero.rightArm) hero.rightArm.rotation.x = 0;
+            }, 180);
+
+            // Deal real damage
+            const dmg = 22 + Math.floor(Math.random() * 6);
+            hero.target.hp -= dmg;
+            audio.playHitPunch();
+            updateCharacterHealthBillboard(hero.target);
+            showFloatingFeedback(hero.target.root.position, `-${dmg}`, false);
+
+            if (hero.target.hp <= 0 && hero.target.alive) {
+              hero.target.alive = false;
+              hero.target.root.rotation.x = -Math.PI / 2;
+              hero.target.root.position.y = 0.2;
+              hero.target = null;
+            }
+            updateHUDCounts();
           }
         }
       }
-    }
-  }
+    });
 
-  // 7. Time Shift Portals
-  for (const portal of timePortals) {
-    portal.hand.rotation.z += delta * 2.5;
-    portal.energy.rotation.z += delta * 1.2;
-
-    const dist = Math.hypot(heroState.pos.x - portal.x, heroState.pos.z - portal.z);
-    if (dist < 2.0 && !portal.active && activeEnc.completed) {
-      portal.active = true;
-      heroState.era = portal.eraTarget;
-      equipHeroWeapon('bow');
-
-      document.getElementById('hud-era').textContent = 'ERA 2: MEDIEVAL';
-      document.getElementById('timeline-fill-lower').style.height = '100%';
-      document.getElementById('time-node-2').classList.add('active');
-      triggerEventBanner('TIME SHIFT! HUNTER LONGBOW UNLOCKED!');
-    }
-  }
-
-  // 8. Projectiles Update
-  for (let i = projectiles.length - 1; i >= 0; i--) {
-    const p = projectiles[i];
-    p.life -= delta;
-    p.mesh.position.addScaledVector(p.dir, p.speed * delta);
-
-    for (const e of enemies) {
-      if (!e.alive) continue;
-      if (p.mesh.position.distanceTo(e.pos) < 1.3) {
-        damageEnemy(e, p.damage);
-        p.life = 0;
-        break;
+    // Enemies AI: Attack Heroes
+    allLivingEnemies.forEach((enemy) => {
+      if (!enemy.target || !enemy.target.alive) {
+        let bestDist = 999;
+        allLivingHeroes.forEach((h) => {
+          const d = enemy.root.position.distanceTo(h.root.position);
+          if (d < bestDist) {
+            bestDist = d;
+            enemy.target = h;
+          }
+        });
       }
-    }
 
-    if (p.life <= 0) {
-      scene.remove(p.mesh);
-      projectiles.splice(i, 1);
-    }
+      if (enemy.target) {
+        const toTarget = enemy.target.root.position.clone().sub(enemy.root.position);
+        const dist = toTarget.length();
+        const angle = Math.atan2(toTarget.x, toTarget.z);
+        enemy.root.rotation.y = angle;
+
+        if (dist > 1.6) {
+          enemy.root.position.addScaledVector(toTarget.normalize(), 5.8 * delta);
+          enemy.walkPhase += delta * 14;
+          enemy.leftLeg.rotation.x = Math.sin(enemy.walkPhase) * 0.7;
+          enemy.rightLeg.rotation.x = -Math.sin(enemy.walkPhase) * 0.7;
+        } else {
+          enemy.attackCooldown -= delta;
+          if (enemy.attackCooldown <= 0) {
+            enemy.attackCooldown = 0.7 + Math.random() * 0.25;
+            audio.playSwordSwing();
+
+            enemy.rightArm.rotation.x = -Math.PI / 1.5;
+            setTimeout(() => {
+              if (enemy.rightArm) enemy.rightArm.rotation.x = 0;
+            }, 180);
+
+            const dmg = 18 + Math.floor(Math.random() * 6);
+            enemy.target.hp -= dmg;
+            audio.playHitPunch();
+            updateCharacterHealthBillboard(enemy.target);
+            showFloatingFeedback(enemy.target.root.position, `-${dmg}`, false);
+
+            if (enemy.target.hp <= 0 && enemy.target.alive) {
+              enemy.target.alive = false;
+              enemy.target.root.rotation.x = -Math.PI / 2;
+              enemy.target.root.position.y = 0.2;
+              enemy.target = null;
+            }
+            updateHUDCounts();
+          }
+        }
+      }
+    });
   }
 
-  // 9. Third-Person Follow Camera
-  const CAM_DIST = 9.8;
-  const CAM_HEIGHT = 5.8;
+  // 6. Camera Follow Framing
+  if (!battleActive) {
+    // Normal follow behind player
+    const CAM_DIST = 9.5;
+    const CAM_HEIGHT = 5.6;
 
-  camTargetPos.set(
-    heroState.pos.x - Math.sin(heroState.headingAngle) * 2.0,
-    heroState.pos.y + CAM_HEIGHT,
-    heroState.pos.z + CAM_DIST
-  );
+    camTargetPos.set(
+      playerState.pos.x - Math.sin(playerState.headingAngle) * 2.0,
+      playerState.pos.y + CAM_HEIGHT,
+      playerState.pos.z + CAM_DIST
+    );
 
-  camLookTarget.set(
-    heroState.pos.x,
-    heroState.pos.y + 1.2,
-    heroState.pos.z - 3.5
-  );
+    camLookTarget.set(
+      playerState.pos.x,
+      playerState.pos.y + 1.2,
+      playerState.pos.z - 4.0
+    );
+  } else {
+    // Cinematic elevated battlefield overview framing both armies
+    camTargetPos.set(0, 11.0, BATTLE_ARENA_Z + 15.0);
+    camLookTarget.set(0, 1.5, BATTLE_ARENA_Z - 3.0);
+  }
 
   camera.position.lerp(camTargetPos, 7 * delta);
   camera.lookAt(camLookTarget);
 
-  // Sunlight travels with hero
-  sunLight.position.set(heroState.pos.x + 35, 55, heroState.pos.z + 30);
-  sunLight.target.position.copy(heroState.pos);
+  // Sunlight tracks the battlefield center
+  sunLight.position.set(playerState.pos.x + 30, 50, playerState.pos.z + 25);
+  sunLight.target.position.copy(playerState.pos);
   sunLight.target.updateMatrixWorld();
 
   renderer.render(scene, camera);
