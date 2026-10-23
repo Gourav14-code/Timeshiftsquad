@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Time Shift Squad - Visual Design Prototype</title>
+  <link rel="stylesheet" href="design-preview.css" />
+
+  <!-- Three.js ES Module Import Map (official stable CDN) -->
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js"
+      }
+    }
+  </script>
+</head>
+<body>
+  <!-- Futuristic Heads-Up Display (HUD) -->
+  <div id="hud">
+    <div class="hud-left">
+      <div class="hud-title-row">
+        <h1 class="hud-title">TIME SHIFT SQUAD</h1>
+        <span class="hud-tag">DESIGN PROTOTYPE</span>
+      </div>
+      <div class="hud-subtitle">SECTOR 04 // CONNECTED Y-JUNCTION PREVIEW</div>
+    </div>
+
+    <div class="hud-center">
+      <div class="hud-badge hud-badge-sector">
+        <span>BRANCH:</span>
+        <strong id="hud-branch-state">APPROACHING FORK</strong>
+      </div>
+      <div class="hud-badge hud-badge-squad">
+        <span>SQUAD:</span>
+        <span id="hud-squad-count" class="badge-value">12</span>
+      </div>
+    </div>
+
+    <div class="hud-right">
+      <button id="cam-toggle-btn" class="hud-cam-btn" title="Toggle between Chase and Drone Overview perspectives">
+        <span>📷 CAMERA:</span>
+        <strong id="cam-mode-label">CHASE CAM</strong>
+      </button>
+    </div>
+  </div>
+
+  <!-- Interactive Controls Tip -->
+  <div id="controls-hint">
+    <div class="hint-item">
+      <span class="key-cap">A</span>
+      <span class="key-cap">D</span>
+      <span>or</span>
+      <span class="key-cap">◄</span>
+      <span class="key-cap">►</span>
+      <span>Steer Across Lanes</span>
+    </div>
+    <div class="hint-divider"></div>
+    <div class="hint-item">
+      <span class="key-cap">C</span>
+      <span>Toggle Camera View</span>
+    </div>
+    <div class="hint-divider"></div>
+    <div class="hint-item">
+      <span class="key-cap">SPACE</span>
+      <span>Pause / Resume Run</span>
+    </div>
+  </div>
+
+  <!-- Fullscreen WebGL Canvas Container -->
+  <div id="game-container"></div>
+
+  <!-- Design Prototype Logic -->
+  <script type="module" src="design-preview.js"></script>
+</body>
+</html>
+
