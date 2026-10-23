@@ -398,19 +398,27 @@ function buildHumanoidCharacter(isLeader = false, isEnemy = false, maxHp = 100) 
   weaponHolder.add(sword);
   root.add(weaponHolder);
 
-  // Overhead Canvas Billboard Health Bar & Numeric Value
-  const hpCanvas = document.createElement('canvas');
-  hpCanvas.width = 160;
-  hpCanvas.height = 36;
-  const hpCtx = hpCanvas.getContext('2d');
-  const hpTexture = new THREE.CanvasTexture(hpCanvas);
+  // Overhead Canvas Billboard Health Bar
+  // REMOVED from players because squad count & team health are already displayed in the top HUD!
+  let hpCanvas = null;
+  let hpCtx = null;
+  let hpTexture = null;
+  let hpBillboard = null;
 
-  const hpBillboard = new THREE.Mesh(
-    new THREE.PlaneGeometry(1.4, 0.32),
-    new THREE.MeshBasicMaterial({ map: hpTexture, transparent: true, side: THREE.DoubleSide })
-  );
-  hpBillboard.position.y = 2.15;
-  root.add(hpBillboard);
+  if (isEnemy) {
+    hpCanvas = document.createElement('canvas');
+    hpCanvas.width = 160;
+    hpCanvas.height = 36;
+    hpCtx = hpCanvas.getContext('2d');
+    hpTexture = new THREE.CanvasTexture(hpCanvas);
+
+    hpBillboard = new THREE.Mesh(
+      new THREE.PlaneGeometry(1.4, 0.32),
+      new THREE.MeshBasicMaterial({ map: hpTexture, transparent: true, side: THREE.DoubleSide })
+    );
+    hpBillboard.position.y = 2.15;
+    root.add(hpBillboard);
+  }
 
   const character = {
     root,
@@ -442,6 +450,7 @@ function buildHumanoidCharacter(isLeader = false, isEnemy = false, maxHp = 100) 
 }
 
 function updateCharacterHealthBillboard(char) {
+  if (!char || !char.hpBillboard || !char.hpCtx) return;
   const ctx = char.hpCtx;
   ctx.clearRect(0, 0, 160, 36);
 
