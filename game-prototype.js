@@ -399,24 +399,25 @@ function buildHumanoidCharacter(isLeader = false, isEnemy = false, maxHp = 100) 
   root.add(weaponHolder);
 
   // Overhead Canvas Billboard Health Bar
-  // REMOVED from players because squad count & team health are already displayed in the top HUD!
+  // For enemies: Slim visual health bar (red fill), NO numeric text labels (per Bug 2 requirement).
+  // For players: Health is already prominently displayed on the top HUD.
+  let hpBillboard = null;
+  let hpTexture = null;
   let hpCanvas = null;
   let hpCtx = null;
-  let hpTexture = null;
-  let hpBillboard = null;
 
   if (isEnemy) {
     hpCanvas = document.createElement('canvas');
-    hpCanvas.width = 160;
-    hpCanvas.height = 36;
+    hpCanvas.width = 128;
+    hpCanvas.height = 16;
     hpCtx = hpCanvas.getContext('2d');
     hpTexture = new THREE.CanvasTexture(hpCanvas);
 
     hpBillboard = new THREE.Mesh(
-      new THREE.PlaneGeometry(1.4, 0.32),
+      new THREE.PlaneGeometry(1.2, 0.15),
       new THREE.MeshBasicMaterial({ map: hpTexture, transparent: true, side: THREE.DoubleSide })
     );
-    hpBillboard.position.y = 2.15;
+    hpBillboard.position.y = 2.05;
     root.add(hpBillboard);
   }
 
@@ -452,31 +453,22 @@ function buildHumanoidCharacter(isLeader = false, isEnemy = false, maxHp = 100) 
 function updateCharacterHealthBillboard(char) {
   if (!char || !char.hpBillboard || !char.hpCtx) return;
   const ctx = char.hpCtx;
-  ctx.clearRect(0, 0, 160, 36);
+  ctx.clearRect(0, 0, 128, 16);
 
   // Background frame
   ctx.fillStyle = 'rgba(15, 23, 42, 0.85)';
-  ctx.roundRect(4, 4, 152, 28, 6);
+  ctx.roundRect(1, 1, 126, 14, 4);
   ctx.fill();
-  ctx.lineWidth = 2;
-  ctx.strokeStyle = char.isEnemy ? '#ef4444' : '#38bdf8';
+  ctx.lineWidth = 1.5;
+  ctx.strokeStyle = '#ef4444';
   ctx.stroke();
 
-  // Health fill
-  const pct = Math.max(0, char.hp / char.maxHp);
-  const fillWidth = 144 * pct;
-  ctx.fillStyle = char.isEnemy ? '#ef4444' : '#22c55e';
-  ctx.roundRect(8, 8, fillWidth, 20, 4);
+  // Health fill (pure visual bar - NO numeric text drawn per Bug 2)
+  const pct = Math.max(0, Math.min(1, char.hp / char.maxHp));
+  const fillWidth = Math.max(0, 122 * pct);
+  ctx.fillStyle = '#ef4444';
+  ctx.roundRect(3, 3, fillWidth, 10, 2);
   ctx.fill();
-
-  // Numeric text: e.g. "100 / 100"
-  ctx.fillStyle = '#ffffff';
-  ctx.font = 'bold 15px "Segoe UI", Arial, sans-serif';
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
-  ctx.shadowColor = 'rgba(0,0,0,0.85)';
-  ctx.shadowBlur = 4;
-  ctx.fillText(`${Math.ceil(char.hp)} / ${char.maxHp}`, 80, 18);
 
   char.hpTexture.needsUpdate = true;
 }
@@ -484,7 +476,7 @@ function updateCharacterHealthBillboard(char) {
 // ----------------------------------------------------------------------------
 // 6. Starting Character: Exactly ONE Player
 // ----------------------------------------------------------------------------
-const heroLeader = buildHumanoidCharacter(true, false, 100);
+const heroLeader = buildHumanoidCharacter(true, false, 150);
 heroLeader.root.position.set(0, 0, 15);
 scene.add(heroLeader.root);
 
@@ -502,17 +494,18 @@ const playerState = {
 const squadMembers = [];
 
 function updateHUDCounts() {
-  const currentSquadCount = 1 + squadMembers.length;
-  document.getElementById('hud-squad-count').textContent = `SQUAD: ${currentSquadCount}`;
+  const livingFollowers = squadMembers.filter((m) => m.alive).length;
+  const currentLivingCount = (heroLeader.alive ? 1 : 0) + livingFollowers;
+  document.getElementById('hud-squad-count').textContent = `SQUAD: ${currentLivingCount}`;
 
   // Calculate real total player squad health
   let totalHeroHp = heroLeader.alive ? heroLeader.hp : 0;
   let totalHeroMax = heroLeader.maxHp;
 
   squadMembers.forEach((m) => {
+    totalHeroMax += m.maxHp;
     if (m.alive) {
       totalHeroHp += m.hp;
-      totalHeroMax += m.maxHp;
     }
   });
 
@@ -526,11 +519,11 @@ function updateHUDCounts() {
   let livingEnemies = 0;
 
   enemySquad.forEach((e) => {
+    totalEnemyMax += e.maxHp;
     if (e.alive) {
       totalEnemyHp += e.hp;
       livingEnemies++;
     }
-    totalEnemyMax += e.maxHp;
   });
 
   document.getElementById('hud-enemy-count').textContent = `ENEMIES: ${livingEnemies}`;
@@ -742,8 +735,8 @@ function triggerAnnouncement(text, type = '') {
 // 8. Final Enemy Squad & Battle Arena
 // ----------------------------------------------------------------------------
 const enemySquad = [];
-const BATTLE_TRIGGER_Z = -102.0;
-const BATTLE_ARENA_Z = -118.0;
+const BATTLE_TRIGGER_Z = -98.0;
+const ARENA_CENTER_Z = -112.0;
 
 // Arena blocking barrier behind enemy squad
 const arenaBarrier = new THREE.Mesh(
@@ -753,30 +746,42 @@ const arenaBarrier = new THREE.Mesh(
 arenaBarrier.position.set(0, 1.75, -132);
 scene.add(arenaBarrier);
 
-// Spawn 10 Enemy Grunts (100 HP each) + 1 Enemy Warlord Captain (300 HP) -> Total 1,300 HP
-// (Engineered so player squad health is strictly lower than the enemy army!)
+// Battle statistics for combat logging & verification
+const battleStats = {
+  heroDamageDealt: 0,
+  enemyDamageDealt: 0,
+};
+
+// Spawn 1 Enemy Captain (140 HP) + 7 Warriors (45 HP each) -> Total 455 HP (8 enemies)
+// Balanced so that picking positive gates (10-12 soldiers = 1,150-1,250 HP) easily triumphs over the enemy army,
+// whereas a weak route (1-2 soldiers = 150-250 HP) results in defeat.
 function initEnemySquad() {
-  // Warlord Captain in center front
-  const captain = buildHumanoidCharacter(false, true, 300);
-  captain.root.scale.set(1.4, 1.4, 1.4);
-  captain.root.position.set(0, 0, BATTLE_ARENA_Z);
-  captain.root.rotation.y = Math.PI; // Facing incoming player
+  // Warlord Captain in center front at Z = -116
+  const captain = buildHumanoidCharacter(false, true, 140);
+  captain.root.scale.set(1.3, 1.3, 1.3);
+  captain.root.position.set(0, 0, -116);
+  captain.root.rotation.y = 0; // Facing incoming player (towards +Z)
   scene.add(captain.root);
   enemySquad.push(captain);
 
-  // 10 Grunts in formation behind and flanking captain
-  for (let i = 0; i < 10; i++) {
-    const grunt = buildHumanoidCharacter(false, true, 100);
-    const col = (i % 5) - 2; // -2, -1, 0, 1, 2
-    const row = Math.floor(i / 5);
-    const ex = col * 1.15;
-    const ez = BATTLE_ARENA_Z - 1.4 - row * 1.3;
+  // 7 Warriors in 2 rows behind captain:
+  const warriorConfigs = [
+    { x: -1.6, z: -119 },
+    { x: -0.55, z: -119 },
+    { x: 0.55, z: -119 },
+    { x: 1.6, z: -119 },
+    { x: -1.1, z: -122 },
+    { x: 0.0, z: -122 },
+    { x: 1.1, z: -122 },
+  ];
 
-    grunt.root.position.set(ex, 0, ez);
-    grunt.root.rotation.y = Math.PI;
-    scene.add(grunt.root);
-    enemySquad.push(grunt);
-  }
+  warriorConfigs.forEach((cfg) => {
+    const warrior = buildHumanoidCharacter(false, true, 45);
+    warrior.root.position.set(cfg.x, 0, cfg.z);
+    warrior.root.rotation.y = 0; // Facing incoming player
+    scene.add(warrior.root);
+    enemySquad.push(warrior);
+  });
 
   updateHUDCounts();
 }
@@ -792,21 +797,52 @@ let battleResolved = false;
 function startFinalBattle() {
   if (battleActive || battleResolved) return;
   battleActive = true;
+  battleStats.heroDamageDealt = 0;
+  battleStats.enemyDamageDealt = 0;
+
+  document.getElementById('hud').classList.add('battle-mode');
   triggerAnnouncement('⚔️ FINAL SQUAD BATTLE ENGAGED!', 'battle');
+
+  // Calculate stats for debug log
+  const allLivingHeroes = [heroLeader, ...squadMembers].filter((h) => h.alive && h.hp > 0);
+  const allLivingEnemies = enemySquad.filter((e) => e.alive && e.hp > 0);
+  const totalHeroHp = allLivingHeroes.reduce((sum, h) => sum + h.hp, 0);
+  const totalHeroMax = allLivingHeroes.reduce((sum, h) => sum + h.maxHp, 0);
+  const totalEnemyHp = allLivingEnemies.reduce((sum, e) => sum + e.hp, 0);
+  const totalEnemyMax = allLivingEnemies.reduce((sum, e) => sum + e.maxHp, 0);
+
+  console.log(`[BATTLE START] Player Alive: ${allLivingHeroes.length}, Squad HP: ${Math.ceil(totalHeroHp)}/${totalHeroMax} | Enemy Alive: ${allLivingEnemies.length}, Army HP: ${Math.ceil(totalEnemyHp)}/${totalEnemyMax}`);
 }
 
 function resolveBattleVictory() {
   battleActive = false;
   battleResolved = true;
   audio.playVictoryFanfare();
+  document.getElementById('hud').classList.remove('battle-mode');
   document.getElementById('modal-victory').classList.add('visible');
+
+  // Remove arena barrier so player can walk through after victory
+  if (arenaBarrier) {
+    arenaBarrier.visible = false;
+  }
+
+  const livingHeroes = [heroLeader, ...squadMembers].filter((h) => h.alive && h.hp > 0).length;
+  const finalHeroHp = [heroLeader, ...squadMembers].filter((h) => h.alive && h.hp > 0).reduce((sum, h) => sum + h.hp, 0);
+
+  console.log(`[BATTLE END - VICTORY] Player Alive: ${livingHeroes}, Squad HP: ${Math.ceil(finalHeroHp)} | Enemy Alive: 0, Army HP: 0 | Hero Dmg Dealt: ${battleStats.heroDamageDealt}, Enemy Dmg Dealt: ${battleStats.enemyDamageDealt}`);
 }
 
 function resolveBattleDefeat() {
   battleActive = false;
   battleResolved = true;
   audio.playDefeatSting();
+  document.getElementById('hud').classList.remove('battle-mode');
   document.getElementById('modal-defeat').classList.add('visible');
+
+  const livingEnemies = enemySquad.filter((e) => e.alive && e.hp > 0).length;
+  const finalEnemyHp = enemySquad.filter((e) => e.alive && e.hp > 0).reduce((sum, e) => sum + e.hp, 0);
+
+  console.log(`[BATTLE END - DEFEAT] Player Alive: 0, Squad HP: 0 | Enemy Alive: ${livingEnemies}, Army HP: ${Math.ceil(finalEnemyHp)} | Hero Dmg Dealt: ${battleStats.heroDamageDealt}, Enemy Dmg Dealt: ${battleStats.enemyDamageDealt}`);
 }
 
 // ----------------------------------------------------------------------------
@@ -1034,16 +1070,35 @@ function animate() {
 
   // 4. Followers Marching Behind Player (Outside Battle)
   if (!battleActive && !battleResolved) {
+    const maxRoadX = (ROAD_WIDTH / 2) - 0.55; // 2.55 (Fence posts are at +-3.1, giving 0.55m safe margin)
+
+    // Formation row centering: keeps the 3-wide squad inside boundaries without bunching or crossing fences
+    const rowHalfWidth = 0.9;
+    const maxRowCenter = Math.max(0, maxRoadX - rowHalfWidth); // 1.65
+    const idealRowCenter = THREE.MathUtils.clamp(playerState.pos.x, -maxRowCenter, maxRowCenter);
+
+    // Compression factor when player is near boundary fence
+    const distToFence = (ROAD_WIDTH / 2) - Math.abs(playerState.pos.x);
+    const spreadFactor = THREE.MathUtils.clamp(distToFence / 1.6, 0.75, 1.0);
+
     for (let i = 0; i < squadMembers.length; i++) {
       const follower = squadMembers[i];
       const slot = getFormationSlot(i);
 
-      const targetPos = playerState.pos.clone()
-        .addScaledVector(new THREE.Vector3(-Math.sin(playerState.headingAngle), 0, -Math.cos(playerState.headingAngle)), slot.offsetZ)
-        .addScaledVector(new THREE.Vector3(Math.cos(playerState.headingAngle), 0, -Math.sin(playerState.headingAngle)), slot.offsetX);
+      // Follower Z is strictly behind player along the road (prevents wild pendulum swing!)
+      const targetZ = playerState.pos.z + slot.offsetZ;
 
-      follower.root.position.lerp(targetPos, 8 * delta);
-      follower.root.rotation.y = playerState.headingAngle;
+      // Follower X is anchored to idealRowCenter with adaptive spread, strictly clamped inside road fences
+      const targetX = THREE.MathUtils.clamp(idealRowCenter + slot.offsetX * spreadFactor, -maxRoadX, maxRoadX);
+
+      follower.root.position.x = THREE.MathUtils.lerp(follower.root.position.x, targetX, 10 * delta);
+      follower.root.position.z = THREE.MathUtils.lerp(follower.root.position.z, targetZ, 12 * delta);
+
+      // Absolute hard boundary clamping: guarantees ZERO followers can ever cross the fence!
+      follower.root.position.x = THREE.MathUtils.clamp(follower.root.position.x, -maxRoadX, maxRoadX);
+
+      // Follower faces forward along the track
+      follower.root.rotation.y = THREE.MathUtils.lerp(follower.root.rotation.y, playerState.headingAngle * 0.35, 8 * delta);
 
       const fWalk = walkCycle + i * 0.4;
       follower.leftLeg.rotation.x = Math.sin(fWalk) * 0.65;
@@ -1053,8 +1108,8 @@ function animate() {
 
   // 5. AUTOMATIC SQUAD BATTLE SIMULATION
   if (battleActive) {
-    const allLivingHeroes = [heroLeader, ...squadMembers].filter((h) => h.alive);
-    const allLivingEnemies = enemySquad.filter((e) => e.alive);
+    const allLivingHeroes = [heroLeader, ...squadMembers].filter((h) => h.alive && h.hp > 0);
+    const allLivingEnemies = enemySquad.filter((e) => e.alive && e.hp > 0);
 
     // Check Victory
     if (allLivingEnemies.length === 0) {
@@ -1070,26 +1125,34 @@ function animate() {
 
     // Heroes AI: Attack Enemies
     allLivingHeroes.forEach((hero) => {
-      // Find nearest living enemy target
-      if (!hero.target || !hero.target.alive) {
+      if (!hero.alive || hero.hp <= 0) return;
+
+      // Retarget if current target is dead or missing
+      if (!hero.target || !hero.target.alive || hero.target.hp <= 0) {
         let bestDist = 999;
+        hero.target = null;
         allLivingEnemies.forEach((e) => {
-          const d = hero.root.position.distanceTo(e.root.position);
-          if (d < bestDist) {
-            bestDist = d;
-            hero.target = e;
+          if (e.alive && e.hp > 0) {
+            const d = hero.root.position.distanceTo(e.root.position);
+            if (d < bestDist) {
+              bestDist = d;
+              hero.target = e;
+            }
           }
         });
       }
 
-      if (hero.target) {
+      if (hero.target && hero.target.alive && hero.target.hp > 0) {
         const toTarget = hero.target.root.position.clone().sub(hero.root.position);
+        toTarget.y = 0;
         const dist = toTarget.length();
-        const angle = Math.atan2(toTarget.x, toTarget.z);
-        hero.root.rotation.y = angle;
+        if (dist > 0.01) {
+          const angle = Math.atan2(toTarget.x, toTarget.z);
+          hero.root.rotation.y = angle;
+        }
 
         if (dist > 1.6) {
-          // Charge forward
+          // Charge forward into battle
           hero.root.position.addScaledVector(toTarget.normalize(), 6.5 * delta);
           hero.walkPhase += delta * 14;
           hero.leftLeg.rotation.x = Math.sin(hero.walkPhase) * 0.7;
@@ -1098,7 +1161,7 @@ function animate() {
           // Attack in melee range!
           hero.attackCooldown -= delta;
           if (hero.attackCooldown <= 0) {
-            hero.attackCooldown = 0.65 + Math.random() * 0.2;
+            hero.attackCooldown = 0.42 + Math.random() * 0.12;
             audio.playSwordSwing();
 
             // Melee sword swing animation
@@ -1107,43 +1170,61 @@ function animate() {
               if (hero.rightArm) hero.rightArm.rotation.x = 0;
             }, 180);
 
-            // Deal real damage
-            const dmg = 22 + Math.floor(Math.random() * 6);
-            hero.target.hp -= dmg;
-            audio.playHitPunch();
-            updateCharacterHealthBillboard(hero.target);
-            showFloatingFeedback(hero.target.root.position, `-${dmg}`, false);
+            // Deal solid damage so positive gate squads triumph!
+            if (hero.target && hero.target.alive && hero.target.hp > 0) {
+              const isLeaderHero = hero === heroLeader;
+              const dmg = isLeaderHero ? 45 : 30 + Math.floor(Math.random() * 8);
+              hero.target.hp = Math.max(0, hero.target.hp - dmg);
+              battleStats.heroDamageDealt += dmg;
+              audio.playHitPunch();
+              updateCharacterHealthBillboard(hero.target);
+              showFloatingFeedback(hero.target.root.position, `-${dmg}`, false);
 
-            if (hero.target.hp <= 0 && hero.target.alive) {
-              hero.target.alive = false;
-              hero.target.root.rotation.x = -Math.PI / 2;
-              hero.target.root.position.y = 0.2;
-              hero.target = null;
+              if (hero.target.hp <= 0) {
+                hero.target.hp = 0;
+                hero.target.alive = false;
+                if (hero.target.hpBillboard) hero.target.hpBillboard.visible = false;
+                hero.target.root.rotation.x = -Math.PI / 2;
+                hero.target.root.position.y = 0.2;
+                hero.target = null;
+              }
+              updateHUDCounts();
             }
-            updateHUDCounts();
           }
         }
       }
+
+      // Hard clamp within arena boundaries
+      hero.root.position.x = THREE.MathUtils.clamp(hero.root.position.x, -2.55, 2.55);
+      hero.root.position.z = THREE.MathUtils.clamp(hero.root.position.z, -128, -100);
     });
 
     // Enemies AI: Attack Heroes
     allLivingEnemies.forEach((enemy) => {
-      if (!enemy.target || !enemy.target.alive) {
+      if (!enemy.alive || enemy.hp <= 0) return;
+
+      if (!enemy.target || !enemy.target.alive || enemy.target.hp <= 0) {
         let bestDist = 999;
+        enemy.target = null;
         allLivingHeroes.forEach((h) => {
-          const d = enemy.root.position.distanceTo(h.root.position);
-          if (d < bestDist) {
-            bestDist = d;
-            enemy.target = h;
+          if (h.alive && h.hp > 0) {
+            const d = enemy.root.position.distanceTo(h.root.position);
+            if (d < bestDist) {
+              bestDist = d;
+              enemy.target = h;
+            }
           }
         });
       }
 
-      if (enemy.target) {
+      if (enemy.target && enemy.target.alive && enemy.target.hp > 0) {
         const toTarget = enemy.target.root.position.clone().sub(enemy.root.position);
+        toTarget.y = 0;
         const dist = toTarget.length();
-        const angle = Math.atan2(toTarget.x, toTarget.z);
-        enemy.root.rotation.y = angle;
+        if (dist > 0.01) {
+          const angle = Math.atan2(toTarget.x, toTarget.z);
+          enemy.root.rotation.y = angle;
+        }
 
         if (dist > 1.6) {
           enemy.root.position.addScaledVector(toTarget.normalize(), 5.8 * delta);
@@ -1153,7 +1234,7 @@ function animate() {
         } else {
           enemy.attackCooldown -= delta;
           if (enemy.attackCooldown <= 0) {
-            enemy.attackCooldown = 0.7 + Math.random() * 0.25;
+            enemy.attackCooldown = 0.85 + Math.random() * 0.25;
             audio.playSwordSwing();
 
             enemy.rightArm.rotation.x = -Math.PI / 1.5;
@@ -1161,22 +1242,29 @@ function animate() {
               if (enemy.rightArm) enemy.rightArm.rotation.x = 0;
             }, 180);
 
-            const dmg = 18 + Math.floor(Math.random() * 6);
-            enemy.target.hp -= dmg;
-            audio.playHitPunch();
-            updateCharacterHealthBillboard(enemy.target);
-            showFloatingFeedback(enemy.target.root.position, `-${dmg}`, false);
+            if (enemy.target && enemy.target.alive && enemy.target.hp > 0) {
+              const dmg = 12 + Math.floor(Math.random() * 5);
+              enemy.target.hp = Math.max(0, enemy.target.hp - dmg);
+              battleStats.enemyDamageDealt += dmg;
+              audio.playHitPunch();
+              showFloatingFeedback(enemy.target.root.position, `-${dmg}`, false);
 
-            if (enemy.target.hp <= 0 && enemy.target.alive) {
-              enemy.target.alive = false;
-              enemy.target.root.rotation.x = -Math.PI / 2;
-              enemy.target.root.position.y = 0.2;
-              enemy.target = null;
+              if (enemy.target.hp <= 0) {
+                enemy.target.hp = 0;
+                enemy.target.alive = false;
+                enemy.target.root.rotation.x = -Math.PI / 2;
+                enemy.target.root.position.y = 0.2;
+                enemy.target = null;
+              }
+              updateHUDCounts();
             }
-            updateHUDCounts();
           }
         }
       }
+
+      // Hard clamp within arena boundaries
+      enemy.root.position.x = THREE.MathUtils.clamp(enemy.root.position.x, -2.55, 2.55);
+      enemy.root.position.z = THREE.MathUtils.clamp(enemy.root.position.z, -128, -100);
     });
   }
 
@@ -1198,9 +1286,9 @@ function animate() {
       playerState.pos.z - 4.0
     );
   } else {
-    // Cinematic elevated battlefield overview framing both armies
-    camTargetPos.set(0, 11.0, BATTLE_ARENA_Z + 15.0);
-    camLookTarget.set(0, 1.5, BATTLE_ARENA_Z - 3.0);
+    // Cinematic elevated battlefield overview centered DIRECTLY on the arena fight at ARENA_CENTER_Z = -112.0
+    camTargetPos.set(0, 9.2, ARENA_CENTER_Z + 15.0);
+    camLookTarget.set(0, 1.2, ARENA_CENTER_Z);
   }
 
   camera.position.lerp(camTargetPos, 7 * delta);

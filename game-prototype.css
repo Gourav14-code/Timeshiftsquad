@@ -218,6 +218,16 @@ html, body {
   align-items: flex-end;
   width: 100%;
   pointer-events: none;
+  transition: opacity 0.35s ease;
+}
+
+#hud.battle-mode .desktop-guide,
+#hud.battle-mode #joystick-container,
+#hud.battle-mode .action-buttons {
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(20px);
+  transition: all 0.35s ease;
 }
 
 /* Movement Joystick */
